@@ -1,0 +1,212 @@
+/* Table Wrapper with Scroll */
+.table-wrapper-scroll {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: auto;
+    max-height: calc(100vh - 400px);
+    border-radius: 12px;
+    background: rgba(20, 24, 33, 0.8);
+}
+
+.table-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    margin-top: 16px;
+}
+
+.table-panel header {
+    flex-shrink: 0;
+    margin-bottom: 12px;
+}
+
+/* Modal Overlay */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* Modal Content */
+.modal-content {
+    background: linear-gradient(145deg, #1a1d24 0%, #0d0f15 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    width: 90%;
+    max-width: 800px;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    animation: scaleIn 0.3s ease-out;
+}
+
+/* Modal Header */
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 24px;
+    background: linear-gradient(135deg, #f5f6fa, #7fd3ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.modal-subtitle {
+    margin: 4px 0 0;
+    color: #9ea4b9;
+    font-size: 14px;
+}
+
+.modal-close {
+    background: transparent;
+    border: none;
+    color: #9ea4b9;
+    font-size: 32px;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.modal-close:hover {
+    background: rgba(255, 101, 132, 0.1);
+    color: #ff6584;
+}
+
+/* Modal Body */
+.modal-body {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* Progress Section */
+.progress-section {
+    margin-bottom: 32px;
+}
+
+.progress-section h3 {
+    margin: 0 0 16px;
+    font-size: 18px;
+    color: #f5f6fa;
+}
+
+.progress-bar-container {
+    width: 100%;
+    height: 40px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 20px;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4f46e5 0%, #7fd3ff 50%, #6be585 100%);
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 16px;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 20px rgba(127, 211, 255, 0.4);
+}
+
+.progress-text {
+    color: white;
+    font-weight: 700;
+    font-size: 14px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.progress-label {
+    margin: 12px 0 0;
+    color: #7fd3ff;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+}
+
+/* Details Grid */
+.details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.detail-item {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: all 0.3s ease;
+}
+
+.detail-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(127, 211, 255, 0.3);
+    transform: translateY(-2px);
+}
+
+.detail-label {
+    font-size: 12px;
+    color: #9ea4b9;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.detail-value {
+    font-size: 16px;
+    color: #f5f6fa;
+    font-weight: 600;
+}
+
+/* Remarks Section */
+.remarks-section {
+    background: rgba(127, 211, 255, 0.05);
+    border: 1px solid rgba(127, 211, 255, 0.2);
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.remarks-section h3 {
+    margin: 0 0 12px;
+    font-size: 16px;
+    color: #7fd3ff;
+}
+
+.remarks-section p {
+    margin: 0;
+    color: #c9cee0;
+    line-height: 1.6;
+}

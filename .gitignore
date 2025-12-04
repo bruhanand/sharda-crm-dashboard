@@ -1,0 +1,73 @@
+# Environment Variables
+.env
+.env.local
+.env.production
+*.env
+
+# Database
+*.sqlite3
+db.sqlite3
+backend/db.sqlite3
+*.sql
+*.dump
+postgres_data/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+backend/venv/
+backend/logs/
+backend/runtime/
+*.egg-info/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Docker
+*.log
+volumes/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Media & Static
+backend/staticfiles/
+backend/media/
+frontend/dist/
+
+# Logs
+logs/
+*.log
+
+# Secrets / Keys
+*.pem
+
+# Backups
+backups/
+*.backup
+
+# OS
+Thumbs.db
+
+# Excel test files
+*.xlsx
+*.csv
+*.pdf
+inspect_*.py

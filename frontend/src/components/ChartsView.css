@@ -1,0 +1,89 @@
+/* Charts Container */
+.charts-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100% !important;
+    overflow: hidden;
+    padding: 0;
+    margin: 0;
+}
+
+.charts-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-shrink: 0;
+}
+
+.charts-header h2 {
+    margin: 4px 0 0;
+    font-size: 24px;
+}
+
+.charts-header .eyebrow {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #7f859c;
+    margin: 0;
+}
+
+.charts-date {
+    color: #7fd3ff;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* Bento Grid - Auto-Fit Responsive Layout */
+.charts-bento-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 16px;
+    overflow-y: auto;
+    padding-right: 4px;
+    width: 100% !important;
+    flex: 1;
+    align-content: start;
+    grid-auto-rows: 420px;
+}
+
+/* No Data Message */
+.no-data {
+    color: #9ea4b9;
+    padding: 60px 20px;
+    text-align: center;
+    font-size: 16px;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 1200px) {
+    .charts-bento-grid {
+        grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+        grid-auto-rows: 400px;
+    }
+}
+
+@media (max-width: 900px) {
+    .charts-bento-grid {
+        grid-template-columns: 1fr;
+        grid-auto-rows: 380px;
+    }
+}
+
+/* Large Screens - More Columns */
+@media (min-width: 1600px) {
+    .charts-bento-grid {
+        grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+        grid-auto-rows: 440px;
+    }
+}
+
+/* Extra Large Screens */
+@media (min-width: 2000px) {
+    .charts-bento-grid {
+        grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+        grid-auto-rows: 460px;
+    }
+}
