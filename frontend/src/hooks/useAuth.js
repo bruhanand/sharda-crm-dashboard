@@ -1,7 +1,7 @@
-"""
-Custom React hooks for authentication management.
-Extracted from App.jsx to improve code organization and reusability.
-"""
+/**
+ * Custom React hooks for authentication management.
+ * Extracted from App.jsx to improve code organization and reusability.
+ */
 import { useState } from 'react'
 
 /**

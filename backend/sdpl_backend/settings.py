@@ -261,6 +261,14 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# File Upload Settings - Allow large data imports
+# Maximum size in bytes for request body (100MB)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100 MB
+# Maximum size in bytes for uploaded files (100MB)
+FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100 MB
+# Maximum number of fields in a request
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
