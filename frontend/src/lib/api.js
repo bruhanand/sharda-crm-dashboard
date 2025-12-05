@@ -2,6 +2,21 @@ const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/,
 
 const buildUrl = (endpoint, params) => {
   const path = endpoint.startsWith('http') ? endpoint : `${BASE_URL}/${endpoint.replace(/^\//, '')}`
+
+  // For relative URLs, just append query params manually
+  if (!path.startsWith('http')) {
+    if (!params || Object.keys(params).length === 0) return path
+
+    const queryParams = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value === undefined || value === null || value === '' || value === false) return
+      queryParams.append(key, value)
+    })
+    const queryString = queryParams.toString()
+    return queryString ? `${path}?${queryString}` : path
+  }
+
+  // For absolute URLs, use URL constructor
   const url = new URL(path)
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
