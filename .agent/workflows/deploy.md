@@ -4,11 +4,11 @@ description: Deploy code to EC2 instance
 
 # Deploy to EC2 Workflow
 
-This workflow guides you through deploying the CRM application to the EC2 instance at **65.0.7.221**.
+This workflow guides you through deploying the CRM application to the EC2 instance at **3.110.37.29**.
 
 ## Prerequisites
 
-- EC2 instance running at 65.0.7.221
+- EC2 instance running at 3.110.37.29
 - SSH key file: `C:\Users\akaaa\Downloads\sharda-crm-pem.pem`
 - Docker and Docker Compose installed on EC2
 
@@ -24,7 +24,7 @@ git push origin main
 
 ### 2. Connect to EC2 Instance
 ```powershell
-ssh -i "C:\Users\akaaa\Downloads\sharda-crm-pem.pem" ubuntu@65.0.7.221
+ssh -i "C:\Users\akaaa\Downloads\sharda-crm-pem.pem" ubuntu@3.110.37.29
 ```
 
 ### 3. Navigate to Application Directory
@@ -75,9 +75,9 @@ docker compose -f docker-compose.prod.yml logs -f backend
 ### 9. Test Application in Browser
 
 Open your browser and test:
-- Frontend: http://65.0.7.221
-- Backend API: http://65.0.7.221/api/health/
-- Admin: http://65.0.7.221/admin/
+- Frontend: http://3.110.37.29
+- Backend API: http://3.110.37.29/api/health/
+- Admin: http://3.110.37.29/admin/
 
 ## 🚀 Quick Deploy (Automated)
 
@@ -151,10 +151,11 @@ docker stats
 
 | Item | Value |
 |------|-------|
-| **EC2 IP** | 65.0.7.221 |
+| **EC2 IP** | 3.110.37.29 |
 | **SSH Key** | C:\Users\akaaa\Downloads\sharda-crm-pem.pem |
-| **App URL** | http://65.0.7.221 |
-| **Health** | http://65.0.7.221/api/health/ |
+| **App URL** | http://3.110.37.29 |
+| **Health** | http://3.110.37.29/api/health/ |
 | **App Dir** | ~/crm-app |
 
 For detailed deployment guide, see: `DEPLOYMENT_GUIDE.md`
+

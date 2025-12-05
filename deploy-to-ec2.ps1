@@ -13,7 +13,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Configuration
-$EC2_IP = "65.0.7.221"
+$EC2_IP = "3.110.37.29"
 $PEM_PATH = "C:\Users\akaaa\Downloads\sharda-crm-pem.pem"
 $APP_DIR = "~/crm-app"
 $LOCAL_DIR = "C:\Users\akaaa\Desktop\crm-sharda\crm-sharda"

@@ -17,7 +17,7 @@ from .services import build_chart_payload, build_forecast, build_insights, compu
 from .admin_views import log_activity
 
 # File upload configuration
-MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
 ALLOWED_EXTENSIONS = ['.csv', '.xlsx', '.xls']
 ALLOWED_CONTENT_TYPES = [
     'text/csv',
@@ -234,9 +234,9 @@ class LeadUploadCreateView(APIView):
         if not isinstance(rows, list):
             return Response({"detail": "rows must be a list"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if len(rows) > 1000:
+        if len(rows) > 10000:
             return Response(
-                {"detail": "Maximum 1000 rows per upload"},
+                {"detail": "Maximum 10000 rows per upload"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
