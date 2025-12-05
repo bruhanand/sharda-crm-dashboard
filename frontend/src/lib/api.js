@@ -1,4 +1,4 @@
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1').replace(/\/$/, '')
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '')
 
 const buildUrl = (endpoint, params) => {
   const path = endpoint.startsWith('http') ? endpoint : `${BASE_URL}/${endpoint.replace(/^\//, '')}`
@@ -19,30 +19,45 @@ export const apiRequest = async (endpoint, options = {}) => {
   // Add auth token if available
   const token = localStorage.getItem('authToken')
   const authHeaders = {
+    Accept: 'application/json',
     ...headers,
-    ...(token && { 'Authorization': `Token ${token}` }),
+    ...(token && { Authorization: `Token ${token}` }),
   }
 
   const response = await fetch(url, {
     signal,
     headers: authHeaders,
-    credentials: 'include',  // CRITICAL: Include cookies/credentials with all requests
+    credentials: 'include', // include cookies/credentials with all requests
     ...rest,
   })
 
   if (response.status === 401) {
-    // Clear token and redirect to login if unauthorized
     localStorage.removeItem('authToken')
     window.location.href = '/'
-    throw new Error('Unauthorized')
+    const err = new Error('Unauthorized')
+    err.status = 401
+    throw err
   }
 
+  // Unified error handling with JSON-first parsing
   if (!response.ok) {
-    const message = await response.text()
-    throw new Error(`API ${response.status}: ${message}`)
+    let parsedBody
+    try {
+      parsedBody = await response.clone().json()
+    } catch (_) {
+      parsedBody = await response.text()
+    }
+
+    const message =
+      (parsedBody && parsedBody.error && parsedBody.error.message) ||
+      (typeof parsedBody === 'string' ? parsedBody : JSON.stringify(parsedBody))
+
+    const err = new Error(`API ${response.status}: ${message}`)
+    err.status = response.status
+    err.details = parsedBody
+    throw err
   }
 
-  // Handle 204 No Content
   if (response.status === 204) {
     return null
   }

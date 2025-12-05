@@ -11,9 +11,19 @@ const Login = ({ onLogin }) => {
     const handleSubmit = async (e) => {
         e.preventDefault()
         setError('')
-        setLoading(true)
 
-        console.log('Attempting login with username:', username)
+        const payload = {
+            username: username.trim(),
+            password: password.trim(),
+        }
+
+        if (!payload.username || !payload.password) {
+            setError('Username and password are required')
+            return
+        }
+
+        setLoading(true)
+        console.log('Submitting login payload:', payload)
 
         try {
             const data = await apiRequest('auth/login/', {
@@ -21,7 +31,7 @@ const Login = ({ onLogin }) => {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ username, password }),
+                body: JSON.stringify(payload),
             })
 
             console.log('Login response:', data)
@@ -43,7 +53,9 @@ const Login = ({ onLogin }) => {
             }
         } catch (err) {
             console.error('Login error:', err)
-            setError(err.message || 'Invalid username or password')
+            const details = err?.details?.error
+            const detailMessage = details?.message || err.message || 'Invalid username or password'
+            setError(detailMessage)
         } finally {
             setLoading(false)
         }

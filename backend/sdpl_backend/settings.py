@@ -26,7 +26,7 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,13.235.68.78', cast=Csv())
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 
 
 # Application definition
@@ -57,7 +57,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-FORCE_HTTPS = config('FORCE_HTTPS', default=not DEBUG, cast=bool)
+FORCE_HTTPS = config('FORCE_HTTPS', default=False, cast=bool)
 
 if FORCE_HTTPS:
     SECURE_SSL_REDIRECT = True
@@ -292,7 +292,7 @@ CRM_HIGH_VALUE_THRESHOLD = config('CRM_HIGH_VALUE_THRESHOLD', default=1_000_000,
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = config(
     'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:3000,http://localhost:5173,http://localhost:5174,https://13.235.68.78',
+    default='http://localhost:3000,http://localhost:5173,http://localhost:5174',
     cast=Csv()
 )
 CORS_ALLOW_CREDENTIALS = True  # Required for credentials in requests
