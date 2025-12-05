@@ -50,8 +50,7 @@ COPY --chown=appuser:appuser . .
 # Switch to non-root user
 USER appuser
 
-# Collect static files (will be overridden if volume mounted)
-RUN python manage.py collectstatic --noinput || true
+# Collect static files will be done at runtime via docker-compose command
 
 # Create logs directory
 RUN mkdir -p logs
