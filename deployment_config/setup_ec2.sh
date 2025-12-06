@@ -53,4 +53,3 @@ gunicorn -c "$APP_DIR/deployment_config/gunicorn_config.py" sdpl_backend.wsgi:ap
 echo "Deployment steps completed. For persistent services, add systemd units for gunicorn."
 
 
-

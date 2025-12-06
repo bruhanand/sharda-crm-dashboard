@@ -2,20 +2,10 @@
  * Filter utility functions
  */
 
-// Default date range: current financial year (Apr 1) to today
-const today = new Date()
-const pad = (n) => String(n).padStart(2, '0')
-const year = today.getFullYear()
-const month = today.getMonth() + 1
-const day = today.getDate()
-const todayStr = `${year}-${pad(month)}-${pad(day)}`
-const fyStartYear = month >= 4 ? year : year - 1
-const fyStartStr = `${fyStartYear}-04-01`
-
 export const initialFilters = {
     dateRangeType: 'enquiry',
-    startDate: fyStartStr,
-    endDate: todayStr,
+    startDate: '',
+    endDate: '',
     leadStatus: 'all',
     leadStage: 'all',
     dealer: 'all',
