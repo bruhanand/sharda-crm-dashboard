@@ -1,0 +1,64 @@
+.fy-toggle {
+    margin-bottom: 1.5rem;
+}
+
+.fy-toggle__label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #9ca3af;
+    margin-bottom: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.fy-toggle__buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.fy-toggle__btn {
+    flex: 1;
+    min-width: 100px;
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #d1d5db;
+    background-color: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.fy-toggle__btn:hover {
+    background-color: #374151;
+    border-color: #4b5563;
+    color: #f3f4f6;
+}
+
+.fy-toggle__btn.active {
+    background-color: #3b82f6;
+    border-color: #3b82f6;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.fy-toggle__btn:focus {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+}
+
+.fy-toggle__btn:active {
+    transform: scale(0.98);
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+    .fy-toggle__btn {
+        flex: 1 1 100%;
+        min-width: auto;
+    }
+}

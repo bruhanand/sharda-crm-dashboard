@@ -2,6 +2,72 @@
  * Filter utility functions
  */
 
+/**
+ * Format date to YYYY-MM-DD
+ */
+const formatDate = (date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+}
+
+/**
+ * Get FY dates based on selection type
+ * @param {string} fyType - 'current', 'previous', or 'custom'
+ * @returns {Object} { startDate, endDate }
+ */
+export const getFYDates = (fyType) => {
+    const today = new Date()
+    const year = today.getFullYear()
+    const month = today.getMonth() + 1 // 1-12
+
+    // Determine current FY start year
+    // If current month is Apr(4) or later, FY started this year
+    // Otherwise, FY started last year
+    const currentFYStartYear = month >= 4 ? year : year - 1
+
+    switch (fyType) {
+        case 'current':
+            return {
+                startDate: `${currentFYStartYear}-04-01`,
+                endDate: formatDate(today)
+            }
+        case 'previous':
+            const prevFYStartYear = currentFYStartYear - 1
+            return {
+                startDate: `${prevFYStartYear}-04-01`,
+                endDate: `${prevFYStartYear + 1}-03-31`
+            }
+        case 'custom':
+        default:
+            return {
+                startDate: '',
+                endDate: ''
+            }
+    }
+}
+
+/**
+ * Get readable FY label
+ * @param {string} fyType - 'current' or 'previous'
+ * @returns {string} FY label like "FY 2024-25"
+ */
+export const getFYLabel = (fyType) => {
+    const today = new Date()
+    const year = today.getFullYear()
+    const month = today.getMonth() + 1
+    const currentFYStartYear = month >= 4 ? year : year - 1
+
+    if (fyType === 'current') {
+        return `FY ${currentFYStartYear}-${String(currentFYStartYear + 1).slice(-2)}`
+    } else if (fyType === 'previous') {
+        const prevFYStartYear = currentFYStartYear - 1
+        return `FY ${prevFYStartYear}-${String(prevFYStartYear + 1).slice(-2)}`
+    }
+    return 'Custom Range'
+}
+
 export const initialFilters = {
     dateRangeType: 'enquiry',
     startDate: '',

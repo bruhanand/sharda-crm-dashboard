@@ -1,5 +1,7 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { buildFilterOptions } from '../lib/analytics'
+import { getFYDates } from '../utils/filterUtils'
+import FYToggle from './FYToggle'
 import logoImage from '../assets/logo.jpg'
 import './FilterBar.css'
 
@@ -26,6 +28,7 @@ export default function FilterBar({
     leads,
 }) {
     const optionMap = useMemo(() => buildFilterOptions(leads), [leads])
+    const [selectedFY, setSelectedFY] = useState('custom')
 
     const handleFilterChange = (field, value) => {
         setFilters((prev) => ({ ...prev, [field]: value }))
@@ -33,6 +36,15 @@ export default function FilterBar({
 
     const handleDateDraftChange = (field, value) => {
         setDateDraft((prev) => ({ ...prev, [field]: value }))
+    }
+
+    const handleFYChange = (fyType) => {
+        setSelectedFY(fyType)
+        const dates = getFYDates(fyType)
+        setDateDraft({
+            start: dates.startDate,
+            end: dates.endDate
+        })
     }
 
     return (
@@ -79,21 +91,21 @@ export default function FilterBar({
                     <header className="date-filter-card__header">
                         <div>
                             <p className="eyebrow">Date Filter</p>
-                            <h3>Time Window</h3>
-                        </div>
-                        <div className="toggle-row compact">
-                            {dateRangeModes.map((mode) => (
-                                <button
-                                    key={mode.value}
-                                    type="button"
-                                    className={`toggle-pill ${filters.dateRangeType === mode.value ? 'active' : ''}`}
-                                    onClick={() => handleFilterChange('dateRangeType', mode.value)}
-                                >
-                                    {mode.label}
-                                </button>
-                            ))}
                         </div>
                     </header>
+                    <FYToggle selectedFY={selectedFY} onFYChange={handleFYChange} />
+                    <div className="toggle-row compact">
+                        {dateRangeModes.map((mode) => (
+                            <button
+                                key={mode.value}
+                                type="button"
+                                className={`toggle-pill ${filters.dateRangeType === mode.value ? 'active' : ''}`}
+                                onClick={() => handleFilterChange('dateRangeType', mode.value)}
+                            >
+                                {mode.label}
+                            </button>
+                        ))}
+                    </div>
                     <div className="date-grid">
                         <label>
                             <span>Start</span>
