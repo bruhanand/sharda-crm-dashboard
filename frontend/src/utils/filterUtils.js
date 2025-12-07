@@ -68,6 +68,83 @@ export const getFYLabel = (fyType) => {
     return 'Custom Range'
 }
 
+/**
+ * Get current FY value (for dropdown)
+ * @returns {string} e.g., "FY2025"
+ */
+export const getCurrentFY = () => {
+    const today = new Date()
+    const year = today.getFullYear()
+    const month = today.getMonth() + 1
+    const currentFYStartYear = month >= 4 ? year : year - 1
+    return `FY${currentFYStartYear}`
+}
+
+/**
+ * Generate all FY options for dropdown
+ * Shows last 5 FYs + current FY + custom
+ * @returns {Array} FY options with value, label, startDate, endDate
+ */
+export const generateFYOptions = () => {
+    const today = new Date()
+    const year = today.getFullYear()
+    const month = today.getMonth() + 1
+
+    // Determine current FY start year
+    const currentFYStartYear = month >= 4 ? year : year - 1
+
+    const options = []
+
+    // Add last 5 FYs + current (total 6 FYs)
+    for (let i = 5; i >= 0; i--) {
+        const fyStart = currentFYStartYear - i
+        const isCurrent = i === 0
+
+        options.push({
+            value: `FY${fyStart}`,
+            label: `FY ${fyStart}-${String(fyStart + 1).slice(-2)}`,
+            startDate: `${fyStart}-04-01`,
+            endDate: isCurrent
+                ? formatDate(today) // Current FY ends today
+                : `${fyStart + 1}-03-31` // Past FY ends March 31
+        })
+    }
+
+    // Add "Custom Range" option
+    options.push({
+        value: 'custom',
+        label: 'Custom Range',
+        startDate: '',
+        endDate: ''
+    })
+
+    return options
+}
+
+/**
+ * Get FY dates from FY value
+ * @param {string} fyValue - e.g., "FY2025" or "custom"
+ * @returns {Object} { startDate, endDate }
+ */
+export const getFYDatesFromValue = (fyValue) => {
+    if (fyValue === 'custom') {
+        return { startDate: '', endDate: '' }
+    }
+
+    const options = generateFYOptions()
+    const selected = options.find(opt => opt.value === fyValue)
+
+    if (selected) {
+        return {
+            startDate: selected.startDate,
+            endDate: selected.endDate
+        }
+    }
+
+    // Fallback to empty
+    return { startDate: '', endDate: '' }
+}
+
 export const initialFilters = {
     dateRangeType: 'enquiry',
     startDate: '',

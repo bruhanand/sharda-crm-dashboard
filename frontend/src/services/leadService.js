@@ -111,4 +111,35 @@ export const leadService = {
     getInsights: async (params = {}) => {
         return apiRequest('insights/', { params })
     },
+
+    /**
+     * Get all field options for dropdowns
+     * @returns {Promise<Object>} Object with field names as keys and arrays of options as values
+     */
+    getAllFieldOptions: async () => {
+        return apiRequest('leads/all-field-options/')
+    },
+
+    /**
+     * Search for leads by enquiry ID
+     * @param {string} query - Search query
+     * @returns {Promise<Object>} Search results
+     */
+    searchLeads: async (query) => {
+        return apiRequest('leads/search/', { params: { q: query } })
+    },
+
+    /**
+     * Create a new lead
+     * @param {Object} leadData - Lead data
+     * @returns {Promise<Object>} Created lead
+     */
+    createLead: async (leadData) => {
+        return apiRequest('leads/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(leadData),
+        })
+    },
 }
+

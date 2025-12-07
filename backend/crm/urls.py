@@ -17,6 +17,9 @@ from .views import (
     LeadUploadCreateView,
     LeadUploadPreviewView,
     LeadViewSet,
+    LeadSearchView,
+    LeadFieldOptionsView,
+    AllFieldOptionsView,
 )
 
 router = DefaultRouter()
@@ -40,6 +43,21 @@ urlpatterns = [
         "leads/upload/create/",
         LeadUploadCreateView.as_view(),
         name="lead-upload-create",
+    ),
+    path(
+        "leads/search/",
+        LeadSearchView.as_view(),
+        name="lead-search",
+    ),
+    path(
+        "lead-field-options/",
+        LeadFieldOptionsView.as_view(),
+        name="lead-field-options",
+    ),
+    path(
+        "leads/all-field-options/",
+        AllFieldOptionsView.as_view(),
+        name="all-field-options",
     ),
     # Admin endpoints
     path("admin/stats/", AdminStatsView.as_view(), name="admin-stats"),

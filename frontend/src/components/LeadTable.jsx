@@ -62,8 +62,8 @@ const LeadTable = ({ leads }) => {
                         <th>Account Status</th>
                         <th>Quantity</th>
                         <th>Priority</th>
-                        <th>Production Status</th>
-                        <th>Dispatch</th>
+                        <th>City</th>
+                        <th>Follow ups</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -125,30 +125,18 @@ const LeadTable = ({ leads }) => {
                             </td>
                             <td>
                                 <span style={{
-                                    background: 'rgba(168, 85, 247, 0.2)',
-                                    color: '#c084fc',
-                                    padding: '4px 8px',
-                                    borderRadius: '4px',
-                                    fontSize: '12px',
-                                    fontWeight: 600,
-                                    display: 'inline-block'
+                                    color: '#e4e4e7',
+                                    fontSize: '13px'
                                 }}>
-                                    {getProductionStatus(lead)}
+                                    {lead.city || '—'}
                                 </span>
                             </td>
                             <td>
-                                <span
-                                    style={{
-                                        background: getDispatchStatus(lead) === 'Ready' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(148, 163, 184, 0.2)',
-                                        color: getDispatchStatus(lead) === 'Ready' ? '#4ade80' : '#94a3b8',
-                                        padding: '4px 8px',
-                                        borderRadius: '4px',
-                                        fontSize: '12px',
-                                        fontWeight: 600,
-                                        display: 'inline-block'
-                                    }}
-                                >
-                                    {getDispatchStatus(lead)}
+                                <span style={{
+                                    color: '#e4e4e7',
+                                    fontSize: '13px'
+                                }}>
+                                    {lead.followup_count || 0}
                                 </span>
                             </td>
                         </tr>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { HIGH_VALUE_THRESHOLD, rupeeFormatter, formatDateTime, formatDate } from '../lib/analytics'
+import AddLeadModal from './AddLeadModal'
 import './UploadView.css'
 
 const filterFieldConfig = [
@@ -539,6 +540,7 @@ export default function UploadView({
     onCloseCommentModal,
 }) {
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
+    const [isAddLeadModalOpen, setIsAddLeadModalOpen] = useState(false)
 
     const filteredLeads = React.useMemo(() => {
         if (!leadSearch || !leadSearch.trim()) {
@@ -601,6 +603,9 @@ export default function UploadView({
                                 onChange={(e) => setLeadSearch(e.target.value)}
                             />
                         </div>
+                        <button className="btn-primary" type="button" onClick={() => setIsAddLeadModalOpen(true)}>
+                            + Add Lead
+                        </button>
                         <button className="btn-primary" type="button" onClick={() => setIsUploadModalOpen(true)}>
                             Import Leads
                         </button>
@@ -711,6 +716,16 @@ export default function UploadView({
                 onClose={closeLeadDrawer}
                 onChange={handleDrawerChange}
                 onSave={handleLeadSave}
+            />
+
+            <AddLeadModal
+                isOpen={isAddLeadModalOpen}
+                onClose={() => setIsAddLeadModalOpen(false)}
+                onSuccess={(newLead) => {
+                    // Optionally refresh leads list here
+                    setIsAddLeadModalOpen(false)
+                    // You could call a refresh function if available
+                }}
             />
         </div>
     )

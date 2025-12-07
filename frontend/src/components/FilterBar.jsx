@@ -1,14 +1,11 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
 import { buildFilterOptions } from '../lib/analytics'
-import { getFYDates } from '../utils/filterUtils'
-import FYToggle from './FYToggle'
+import { generateFYOptions, getCurrentFY, getFYDatesFromValue } from '../utils/filterUtils'
+import FYDropdown from './FYDropdown'
 import logoImage from '../assets/logo.jpg'
 import './FilterBar.css'
 
-const dateRangeModes = [
-    { label: 'Enquiry Date', value: 'enquiry' },
-    { label: 'Close Date', value: 'close' },
-]
+// Removed date range modes - always use enquiry date
 
 const filterFieldConfig = [
     { label: 'City', stateKey: 'city', optionKey: 'city' },
@@ -28,23 +25,49 @@ export default function FilterBar({
     leads,
 }) {
     const optionMap = useMemo(() => buildFilterOptions(leads), [leads])
-    const [selectedFY, setSelectedFY] = useState('custom')
+    const fyOptions = useMemo(() => generateFYOptions(), [])
+    const [selectedFY, setSelectedFY] = useState(() => getCurrentFY())
+
+    // Initialize with current FY on mount
+    useEffect(() => {
+        const currentFY = getCurrentFY()
+        const dates = getFYDatesFromValue(currentFY)
+        setDateDraft({ start: dates.startDate, end: dates.endDate })
+        setFilters(prev => ({
+            ...prev,
+            startDate: dates.startDate,
+            endDate: dates.endDate,
+            dateRangeType: 'enquiry' // Always enquiry date
+        }))
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleFilterChange = (field, value) => {
         setFilters((prev) => ({ ...prev, [field]: value }))
     }
 
     const handleDateDraftChange = (field, value) => {
+        // When user manually changes dates, switch to custom
+        setSelectedFY('custom')
         setDateDraft((prev) => ({ ...prev, [field]: value }))
     }
 
-    const handleFYChange = (fyType) => {
-        setSelectedFY(fyType)
-        const dates = getFYDates(fyType)
+    const handleFYChange = (fyValue) => {
+        setSelectedFY(fyValue)
+        const dates = getFYDatesFromValue(fyValue)
+
+        // Update date inputs
         setDateDraft({
             start: dates.startDate,
             end: dates.endDate
         })
+
+        // AUTO-APPLY: Update filters immediately
+        setFilters(prev => ({
+            ...prev,
+            startDate: dates.startDate,
+            endDate: dates.endDate,
+            dateRangeType: 'enquiry'
+        }))
     }
 
     return (
@@ -87,25 +110,30 @@ export default function FilterBar({
                     </div>
                 </section>
 
+                {/* NEW: Separate FY Section */}
+                <section className="fy-filter-card">
+                    <header className="fy-filter-card__header">
+                        <div>
+                            <p className="eyebrow">Financial Year</p>
+                        </div>
+                    </header>
+                    <div className="fy-filter-card__body">
+                        <FYDropdown
+                            selectedFY={selectedFY}
+                            onFYChange={handleFYChange}
+                            fyOptions={fyOptions}
+                        />
+                    </div>
+                </section>
+
+                {/* Date Filter Section - Enquiry Date Only */}
                 <section className="date-filter-card">
                     <header className="date-filter-card__header">
                         <div>
                             <p className="eyebrow">Date Filter</p>
+                            <p className="date-type-label">Enquiry Date</p>
                         </div>
                     </header>
-                    <FYToggle selectedFY={selectedFY} onFYChange={handleFYChange} />
-                    <div className="toggle-row compact">
-                        {dateRangeModes.map((mode) => (
-                            <button
-                                key={mode.value}
-                                type="button"
-                                className={`toggle-pill ${filters.dateRangeType === mode.value ? 'active' : ''}`}
-                                onClick={() => handleFilterChange('dateRangeType', mode.value)}
-                            >
-                                {mode.label}
-                            </button>
-                        ))}
-                    </div>
                     <div className="date-grid">
                         <label>
                             <span>Start</span>

@@ -35,7 +35,8 @@
 
 /* Generic Card Style */
 .filter-card,
-.date-filter-card {
+.date-filter-card,
+.fy-filter-card {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 16px;
@@ -48,16 +49,26 @@
 }
 
 .filter-card__header,
-.date-filter-card__header {
+.date-filter-card__header,
+.fy-filter-card__header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
     margin-bottom: 8px;
 }
 
-.date-filter-card__header {
+.date-filter-card__header,
+.fy-filter-card__header {
     flex-direction: column;
     gap: 12px;
+}
+
+/* Date type label */
+.date-type-label {
+    font-size: 13px;
+    color: #a1a1aa;
+    margin: 0;
+    font-weight: 500;
 }
 
 .eyebrow {

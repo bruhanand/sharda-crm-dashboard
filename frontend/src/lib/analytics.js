@@ -183,6 +183,7 @@ export const formatKpisResponse = (payload = {}) => {
     openCount: payload.open_leads ?? 0,
     closedCount: payload.closed_leads ?? 0,
     wonCount: payload.won_leads ?? 0,
+    lostCount: payload.lost_leads ?? 0,  // New metric
     conversion: total ? Number(conversionValue).toFixed(1) : '0.0',
     pipelineValue: payload.pipeline_value ?? 0,
     wonValue: payload.won_value ?? 0,

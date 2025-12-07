@@ -26,11 +26,32 @@ def _group_counts(leads: list[Lead], attr: str) -> list[dict]:
 
 
 def compute_kpis(queryset):
+    """
+    Generate KPI metrics from queryset.
+    
+    Updated KPI Calculations:
+    - Total leads: count of all leads
+    - Open leads: count where lead_status='Open'
+    - Closed leads: total - open
+    - Won leads: count where lead_stage contains 'closed won' or 'order booked'
+    - Lost leads: closed - won
+    - Conversion rate: (won / total) * 100
+    - Avg lead age: average of lead_age_days for ALL leads (not just open)
+    - Avg close time: average close_time_days for CLOSED leads only
+    """
     leads = _as_list(queryset)
     total = len(leads)
-    open_leads = [lead for lead in leads if lead.lead_status == "Open"]
-    closed_leads = [lead for lead in leads if lead.lead_status == "Closed"]
-    won_leads = [lead for lead in leads if lead.win_flag]
+    open_leads_list = [lead for lead in leads if lead.lead_status == "Open"]
+    closed_leads_list = [lead for lead in leads if lead.lead_status == "Closed"]
+    
+    # Won leads: lead_stage contains 'closed won' or 'order booked' (case-insensitive)
+    won_leads_list = [
+        lead for lead in leads 
+        if lead.lead_stage and (
+            'closed won' in lead.lead_stage.lower() or 
+            'order booked' in lead.lead_stage.lower()
+        )
+    ]
 
     def _sum(values):
         total = Decimal("0")
@@ -39,16 +60,25 @@ def compute_kpis(queryset):
             total += Decimal(value)
         return float(total)
 
-    pipeline_value = _sum(open_leads)
-    won_value = _sum(won_leads)
+    pipeline_value = _sum(open_leads_list)
+    won_value = _sum(won_leads_list)
+    
+    # Closed leads = Total - Open
+    closed_count = total - len(open_leads_list)
+    
+    # Lost leads = Closed - Won
+    lost_count = closed_count - len(won_leads_list)
 
-    leads_with_close_time = [l for l in closed_leads if l.close_time_days]
+    # Average close time for CLOSED leads only
+    leads_with_close_time = [l for l in closed_leads_list if l.close_time_days]
     avg_close = (
         round(sum(l.close_time_days for l in leads_with_close_time) / len(leads_with_close_time))
         if leads_with_close_time
         else None
     )
-    leads_with_age = [l for l in open_leads if l.lead_age_days]
+    
+    # Average lead age for ALL leads (not just open)
+    leads_with_age = [l for l in leads if l.lead_age_days]
     avg_age = (
         round(sum(l.lead_age_days for l in leads_with_age) / len(leads_with_age))
         if leads_with_age
@@ -57,15 +87,17 @@ def compute_kpis(queryset):
 
     return {
         "total_leads": total,
-        "open_leads": len(open_leads),
-        "closed_leads": len(closed_leads),
-        "won_leads": len(won_leads),
-        "conversion_rate": round((len(won_leads) / total) * 100, 1) if total else 0,
+        "open_leads": len(open_leads_list),
+        "closed_leads": closed_count,
+        "won_leads": len(won_leads_list),
+        "lost_leads": lost_count,  # New metric
+        "conversion_rate": round((len(won_leads_list) / total) * 100, 1) if total else 0,
         "pipeline_value": pipeline_value,
         "won_value": won_value,
         "avg_close_days": avg_close,
         "avg_lead_age_days": avg_age,
     }
+
 
 
 def build_chart_payload(queryset):

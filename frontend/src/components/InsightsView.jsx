@@ -11,9 +11,8 @@ const CLUSTER_COLORS = {
     'No Follow-Up': '#ff6584',
 }
 
-const InsightsView = ({ insightData, topDealers = [], topEmployees = [] }) => {
+const InsightsView = ({ insightData, kpiData, topDealers = [], topEmployees = [] }) => {
     const {
-        highValueCount = 0,
         overdueFollowups = 0,
         lossReasons = [],
         fastestSegments = [],
@@ -21,6 +20,10 @@ const InsightsView = ({ insightData, topDealers = [], topEmployees = [] }) => {
         employeeConversion = [],
         followupVsConversion = [],
     } = insightData || {}
+
+    // Get lost leads count from KPI data
+    const lostCount = kpiData?.lostCount || 0
+
 
     // Filter states for Top charts
     const [dealersLimit, setDealersLimit] = useState(10)
@@ -55,9 +58,9 @@ const InsightsView = ({ insightData, topDealers = [], topEmployees = [] }) => {
                     flexDirection: 'column',
                     justifyContent: 'center'
                 }}>
-                    <h2 style={{ color: '#6be585', fontSize: '3rem', margin: 0, lineHeight: 1 }}>{highValueCount}</h2>
-                    <p style={{ color: '#f5f6fa', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '0.05em', marginTop: '8px', fontWeight: 600 }}>High-Value Leads</p>
-                    <small style={{ color: '#9ea4b9', fontSize: '12px' }}>Leads exceeding ₹10L threshold</small>
+                    <h2 style={{ color: '#ff9f43', fontSize: '3rem', margin: 0, lineHeight: 1 }}>{lostCount}</h2>
+                    <p style={{ color: '#f5f6fa', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '0.05em', marginTop: '8px', fontWeight: 600 }}>Lost Leads</p>
+                    <small style={{ color: '#9ea4b9', fontSize: '12px' }}>Closed leads that didn't convert</small>
                 </div>
 
                 <div style={{

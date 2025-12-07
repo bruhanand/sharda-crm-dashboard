@@ -3,6 +3,7 @@ import KpiCards from './KpiCards'
 import ChartsView from './ChartsView'
 import TablesView from './TablesView'
 import InsightsView from './InsightsView'
+import ForecastView from './ForecastView'
 import UploadView from './UploadView'
 import AdminView from './AdminView'
 import LeadTable from './LeadTable'
@@ -18,6 +19,7 @@ const Dashboard = ({
     leads,
     kpiData,
     forecastSummary,
+    forecastData,
     insightData,
     leadSearch,
     setLeadSearch,
@@ -78,11 +80,15 @@ const Dashboard = ({
                 return (
                     <InsightsView
                         insightData={insightData}
+                        kpiData={kpiData}
                         forecastSummary={forecastSummary}
                         topDealers={topDealers}
                         topEmployees={topEmployees}
                     />
                 )
+
+            case 'Forecast':
+                return <ForecastView forecastData={forecastData} />
 
             case 'Update Leads':
                 return (
