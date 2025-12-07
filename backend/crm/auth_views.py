@@ -33,6 +33,7 @@ class CustomAuthToken(ObtainAuthToken):
             "username": user.username,
             "email": user.email,
             "is_admin": user.is_superuser,
+            "is_staff": user.is_staff,  # Add this for admin tab visibility
         })
 
 

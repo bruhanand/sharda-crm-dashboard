@@ -13,13 +13,14 @@ import { buildQueryParams } from '../utils/filterUtils'
 /**
  * Custom hook for managing lead data fetching and state
  */
-export const useLeadData = (filters, refreshKey, isAuthenticated) => {
+export const useLeadData = (filters, refreshKey, isAuthenticated, isAdmin = false) => {
     const [leads, setLeads] = useState(fallbackLeads)
     const [kpiData, setKpiData] = useState(() => buildKpisFromDataset(fallbackLeads))
     const [forecastSummary, setForecastSummary] = useState(() =>
         buildForecastFromDataset(fallbackLeads),
     )
     const [insightData, setInsightData] = useState(() => buildInsightsFromDataset(fallbackLeads))
+    const [forecastData, setForecastData] = useState(null)  // Admin-only forecast data
     const [isLoading, setIsLoading] = useState(false)
     const [apiError, setApiError] = useState(null)
 
@@ -35,17 +36,39 @@ export const useLeadData = (filters, refreshKey, isAuthenticated) => {
             setIsLoading(true)
             setApiError(null)
             try {
-                const [leadResponse, kpiResponse, forecastResponse] = await Promise.all([
+                // Base requests for all users
+                const baseRequests = [
                     apiRequest('leads/', { params, signal: controller.signal }),
                     apiRequest('kpis/', { params: aggregateParams, signal: controller.signal }),
-                    apiRequest('forecast/', { params: aggregateParams, signal: controller.signal }),
-                ])
+                ]
+
+                // Admin users get forecast data
+                if (isAdmin) {
+                    baseRequests.push(
+                        apiRequest('forecast/', { params: aggregateParams, signal: controller.signal })
+                    )
+                }
+
+                const responses = await Promise.all(baseRequests)
+
+                let leadResponse, kpiResponse, forecastResponse
+                if (isAdmin) {
+                    [leadResponse, kpiResponse, forecastResponse] = responses
+                } else {
+                    [leadResponse, kpiResponse] = responses
+                }
 
                 const serverLeads = leadResponse.results ?? leadResponse
                 setLeads(serverLeads)
                 setKpiData(formatKpisResponse(kpiResponse))
-                setForecastSummary(formatForecastResponse(forecastResponse))
+                // Build insights from client-side - this was working before!
                 setInsightData(buildInsightsFromDataset(serverLeads))
+                setForecastSummary(buildForecastFromDataset(serverLeads))
+
+                // Set admin forecast data if available
+                if (isAdmin && forecastResponse) {
+                    setForecastData(forecastResponse)
+                }
             } catch (error) {
                 if (error.name === 'AbortError') return
                 console.error(error)
@@ -67,7 +90,7 @@ export const useLeadData = (filters, refreshKey, isAuthenticated) => {
 
         load()
         return () => controller.abort()
-    }, [filters, refreshKey, isAuthenticated])
+    }, [filters, refreshKey, isAuthenticated, isAdmin])
 
     return {
         leads,
@@ -75,6 +98,7 @@ export const useLeadData = (filters, refreshKey, isAuthenticated) => {
         kpiData,
         forecastSummary,
         insightData,
+        forecastData,
         isLoading,
         apiError,
     }

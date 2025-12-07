@@ -4,7 +4,7 @@ Uses Django aggregation for performance instead of loading all records into memo
 """
 from django.db.models import (
     Count, Sum, Avg, Q, F, Value, CharField, 
-    IntegerField, FloatField, Case, When
+    IntegerField, FloatField, Case, When, Cast
 )
 from django.db.models.functions import TruncMonth, Coalesce
 from django.utils import timezone
@@ -16,6 +16,16 @@ def compute_kpis(queryset):
     """
     Generate KPI metrics using database aggregation.
     
+    Updated KPI Calculations:
+    - Total leads: count of all leads
+    - Open leads: count where lead_status='Open'
+    - Closed leads: total - open
+   - Won leads: count where lead_stage contains 'closed won' or 'order booked'
+    - Lost leads: closed - won
+    - Conversion rate: (won / total) * 100
+    - Avg lead age: average of lead_age_days for ALL leads (not just open)
+    - Avg close time: average close_time_days for CLOSED leads only
+    
     PERFORMANCE OPTIMIZATION:
     - Before: O(n) memory - loads all records
     - After: O(1) memory - database aggregation
@@ -24,32 +34,50 @@ def compute_kpis(queryset):
     stats = queryset.aggregate(
         total_leads=Count('id'),
         open_leads=Count('id', filter=Q(lead_status='Open')),
-        closed_leads=Count('id', filter=Q(lead_status='Closed')),
-        won_leads=Count('id', filter=Q(win_flag=True)),
+        # Won leads: lead_stage contains 'closed won' or 'order booked' (case-insensitive)
+        won_leads=Count('id', filter=(
+            Q(lead_stage__icontains='closed won') | 
+            Q(lead_stage__icontains='order booked')
+        )),
         pipeline_value=Sum('order_value', filter=Q(lead_status='Open'), default=0),
-        won_value=Sum('order_value', filter=Q(win_flag=True), default=0),
-        # Average close time for closed leads
+        won_value=Sum('order_value', filter=(
+            Q(lead_stage__icontains='closed won') | 
+            Q(lead_stage__icontains='order booked')
+        ), default=0),
+        # Average close time for CLOSED leads only
         avg_close_days=Avg('close_time_days', filter=Q(lead_status='Closed')),
-        # Average age for open leads
-        avg_lead_age_days=Avg('lead_age_days', filter=Q(lead_status='Open')),
+        # Average lead age for ALL leads (not just open)
+        avg_lead_age_days=Avg('lead_age_days'),
     )
     
     total = stats['total_leads'] or 0
+    open_leads = stats['open_leads'] or 0
+    won_leads = stats['won_leads'] or 0
+    
+    # Closed leads = Total - Open
+    closed_leads = total - open_leads
+    
+    # Lost leads = Closed - Won
+    lost_leads = closed_leads - won_leads
+    
+    # Conversion rate = (won / total) * 100
     conversion_rate = (
-        (stats['won_leads'] / total * 100) if total > 0 else 0
+        (won_leads / total * 100) if total > 0 else 0
     )
     
     return {
         'total_leads': total,
-        'open_leads': stats['open_leads'] or 0,
-        'closed_leads': stats['closed_leads'] or 0,
-        'won_leads': stats['won_leads'] or 0,
+        'open_leads': open_leads,
+        'closed_leads': closed_leads,
+        'won_leads': won_leads,
+        'lost_leads': lost_leads,  # New metric
         'conversion_rate': round(conversion_rate, 1),
         'pipeline_value': float(stats['pipeline_value'] or 0),
         'won_value': float(stats['won_value'] or 0),
         'avg_close_days': round(stats['avg_close_days']) if stats['avg_close_days'] else None,
         'avg_lead_age_days': round(stats['avg_lead_age_days']) if stats['avg_lead_age_days'] else None,
     }
+
 
 
 def build_chart_payload(queryset):
@@ -164,11 +192,72 @@ def build_insights(queryset):
         for item in fastest_segments
     ]
     
+    # Lead Behavior Clusters (based on engagement/followup count)
+    clusters = list(
+        queryset.values('followup_count')
+        .annotate(count=Count('id'))
+        .order_by('followup_count')
+    )
+    
+    # Group into engagement clusters
+    cluster_data = []
+    for item in clusters:
+        followup_count = item['followup_count'] or 0
+        if followup_count == 0:
+            label = 'No Follow-Up'
+        elif followup_count <= 2:
+            label = 'Low Engagement'
+        elif followup_count <= 5:
+            label = 'Medium Engagement'
+        else:
+            label = 'High Engagement'
+        
+        # Find or add to cluster
+        existing = next((c for c in cluster_data if c['label'] == label), None)
+        if existing:
+            existing['value'] += item['count']
+        else:
+            cluster_data.append({'label': label, 'value': item['count']})
+    
+    # Employee Conversion (top employees by conversion rate)
+    employee_conversion = list(
+        queryset.exclude(owner__isnull=True)
+        .exclude(owner='')
+        .values('owner')
+        .annotate(
+            total=Count('id'),
+            won=Count('id', filter=(
+                Q(lead_stage__icontains='closed won') | 
+                Q(lead_stage__icontains='order booked')
+            ))
+        )
+        .filter(total__gte=5)  # At least 5 leads for significance
+        .annotate(
+            label=F('owner'),
+            conversion_rate=Cast(F('won'), FloatField()) / Cast(F('total'), FloatField()) * 100
+        )
+        .values('label', 'conversion_rate', 'total', 'won')
+        .order_by('-conversion_rate')[:10]
+    )
+    
+    # Format employee conversion
+    employee_conversion_formatted = [
+        {
+            'label': item['label'],
+            'conversion_rate': round(item['conversion_rate'], 1),
+            'total_leads': item['total'],
+            'won_leads': item['won']
+        }
+        for item in employee_conversion
+    ]
+    
     return {
-        'high_value_count': high_value_count,
-        'overdue': overdue_count,
-        'loss_reasons': loss_reasons,
-        'fastest_segments': fastest_segments_formatted,
+        'highValueCount': high_value_count,
+        'overdueFollowups': overdue_count,
+        'lossReasons': loss_reasons,
+        'fastestSegments': fastest_segments_formatted,
+        'clusters': cluster_data,
+        'employeeConversion': employee_conversion_formatted,
     }
 
 

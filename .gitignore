@@ -1,8 +1,19 @@
 # Environment Variables
+# Exclude active .env files (these are local/production specific)
 .env
-.env.local
-.env.production
-*.env
+backend/.env
+frontend/.env
+
+# But INCLUDE template files (these should be committed)
+# !.env.local
+# !.env.production
+# !.env.example
+# !backend/.env.local
+# !backend/.env.production
+# !backend/.env.example
+# !frontend/.env.local
+# !frontend/.env.production
+# !frontend/.env.example
 
 # Database
 *.sqlite3

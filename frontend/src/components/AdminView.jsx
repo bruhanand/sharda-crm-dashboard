@@ -35,6 +35,9 @@ const AdminView = () => {
     const [selectedLeads, setSelectedLeads] = useState([])
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
+    // User delete confirmation
+    const [userToDelete, setUserToDelete] = useState(null)
+
     useEffect(() => {
         loadData()
     }, [activeSection])
@@ -117,18 +120,29 @@ const AdminView = () => {
         }
     }
 
-    const handleDeleteUser = async (userId, username) => {
-        if (!confirm(`Are you sure you want to delete user "${username}"? This cannot be undone.`)) {
-            return
-        }
+    const handleDeleteUser = (userId, username) => {
+        // Show custom confirmation modal
+        setUserToDelete({ id: userId, username })
+    }
+
+    const confirmDeleteUser = async () => {
+        if (!userToDelete) return
+
         setError(null)
         try {
-            await apiRequest(`admin/users/${userId}/`, {
+            console.log(`Deleting user ${userToDelete.id} (${userToDelete.username})`)
+            await apiRequest(`admin/users/${userToDelete.id}/`, {
                 method: 'DELETE'
             })
+            console.log(`User "${userToDelete.username}" deleted successfully`)
+            setUserToDelete(null)
+            // Refresh the user list
             loadData()
         } catch (err) {
-            setError(err.message || 'Failed to delete user')
+            console.error('Delete error:', err)
+            const errorMsg = err.message || 'Failed to delete user'
+            setError(errorMsg)
+            setUserToDelete(null)
         }
     }
 
@@ -362,19 +376,26 @@ const AdminView = () => {
                                                 <td>{formatDate(user.date_joined)}</td>
                                                 <td className="actions-cell">
                                                     <button
-                                                        className="btn-icon"
+                                                        className="btn-icon btn-edit"
                                                         onClick={() => handleEditUser(user)}
                                                         title="Edit user"
                                                     >
-                                                        ✏️
+                                                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                                            <path d="M11.334 2.00004C11.5091 1.82494 11.7169 1.68605 11.9457 1.59129C12.1745 1.49653 12.4197 1.44775 12.6673 1.44775C12.9149 1.44775 13.1601 1.49653 13.3889 1.59129C13.6177 1.68605 13.8256 1.82494 14.0007 2.00004C14.1757 2.17513 14.3146 2.383 14.4094 2.61178C14.5042 2.84055 14.5529 3.08575 14.5529 3.33337C14.5529 3.58099 14.5042 3.82619 14.4094 4.05497C14.3146 4.28374 14.1757 4.49161 14.0007 4.66671L5.00065 13.6667L1.33398 14.6667L2.33398 11L11.334 2.00004Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                        </svg>
                                                     </button>
-                                                    <button
-                                                        className="btn-icon btn-danger"
-                                                        onClick={() => handleDeleteUser(user.id, user.username)}
-                                                        title="Delete user"
-                                                    >
-                                                        🗑️
-                                                    </button>
+                                                    {/* Don't show delete button for admin user */}
+                                                    {user.username !== 'admin' && (
+                                                        <button
+                                                            className="btn-icon btn-delete"
+                                                            onClick={() => handleDeleteUser(user.id, user.username)}
+                                                            title="Delete user"
+                                                        >
+                                                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                                                <path d="M2 4H14M12.6667 4V13.3333C12.6667 14 12 14.6667 11.3333 14.6667H4.66667C4 14.6667 3.33333 14 3.33333 13.3333V4M5.33333 4V2.66667C5.33333 2 6 1.33333 6.66667 1.33333H9.33333C10 1.33333 10.6667 2 10.6667 2.66667V4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                            </svg>
+                                                        </button>
+                                                    )}
                                                 </td>
                                             </tr>
                                         ))}
@@ -522,6 +543,29 @@ const AdminView = () => {
                         </div>
                     )}
                     */}
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {userToDelete && (
+                <div className="delete-modal-overlay" onClick={() => setUserToDelete(null)}>
+                    <div className="delete-modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="delete-modal-icon">⚠️</div>
+                        <h3>Delete User?</h3>
+                        <p>
+                            Are you sure you want to delete user <span className="delete-modal-username">"{userToDelete.username}"</span>?
+                            <br /><br />
+                            This action cannot be undone and will permanently remove all data associated with this user.
+                        </p>
+                        <div className="delete-modal-actions">
+                            <button className="btn-danger" onClick={confirmDeleteUser}>
+                                Delete User
+                            </button>
+                            <button className="btn-secondary" onClick={() => setUserToDelete(null)}>
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

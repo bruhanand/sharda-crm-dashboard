@@ -53,9 +53,20 @@ const Login = ({ onLogin }) => {
             }
         } catch (err) {
             console.error('Login error:', err)
-            const details = err?.details?.error
-            const detailMessage = details?.message || err.message || 'Invalid username or password'
-            setError(detailMessage)
+
+            // Parse error message from Django's error format
+            let errorMessage = 'Invalid username or password'
+
+            if (err.message) {
+                // Check if it's the Django error format with non_field_errors
+                if (err.message.includes('non_field_errors') || err.message.includes('Unable to log in')) {
+                    errorMessage = 'Invalid username or password'
+                } else if (typeof err.message === 'string') {
+                    errorMessage = err.message
+                }
+            }
+
+            setError(errorMessage)
         } finally {
             setLoading(false)
         }

@@ -13,3 +13,10 @@ python-decouple>=3.8
 gunicorn>=21.2.0
 psycopg2-binary>=2.9.9
 whitenoise>=6.6.0
+
+# ML Forecasting Libraries (NO pmdarima - using statsmodels directly)
+statsmodels==0.14.1
+prophet==1.1.5
+scikit-learn==1.4.0
+Cython>=3.0.0
+numpy>=1.24.0

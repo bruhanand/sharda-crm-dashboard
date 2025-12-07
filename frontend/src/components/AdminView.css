@@ -81,13 +81,16 @@
     color: #fff;
 }
 
-/* Table Styles - Dark Mode */
+/* Table Styles - Dark Mode with Scroll */
 .table-container {
     background: #141821;
-    /* Dark background */
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     overflow: hidden;
+    max-height: 600px;
+    /* ADD SCROLL */
+    overflow-y: auto;
+    /* ADD SCROLL */
 }
 
 .admin-table {
@@ -98,6 +101,9 @@
 .admin-table thead {
     background: #1f2937;
     color: #fff;
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
 .admin-table th {
@@ -114,7 +120,6 @@
     padding: 1rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     color: #e4e4e7;
-    /* Light text for dark bg */
     font-size: 0.9375rem;
 }
 
@@ -133,36 +138,163 @@
     font-style: italic;
 }
 
+/* Actions Column - Fixed Width */
+.admin-table th:last-child,
+.admin-table td:last-child {
+    width: 100px;
+    text-align: center;
+}
+
 .actions-cell {
     display: flex;
     gap: 0.5rem;
+    align-items: center;
+    justify-content: center;
 }
 
 .btn-icon {
-    background: transparent;
-    border: none;
-    font-size: 1.1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    width: 36px;
+    height: 36px;
     cursor: pointer;
-    padding: 6px;
-    border-radius: 6px;
+    padding: 0;
+    border-radius: 8px;
     transition: all 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #a1a1aa;
+    color: #9ca3af;
 }
 
 .btn-icon:hover {
     background: rgba(255, 255, 255, 0.1);
-    color: #fff;
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
 }
 
-.btn-icon.btn-danger {
+.btn-icon.btn-edit {
+    color: #3b82f6;
+    border-color: rgba(59, 130, 246, 0.2);
+}
+
+.btn-icon.btn-edit:hover {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.4);
+    color: #60a5fa;
+}
+
+.btn-icon.btn-delete {
     color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.2);
 }
 
-.btn-icon.btn-danger:hover {
+.btn-icon.btn-delete:hover {
     background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #f87171;
+}
+
+/* Delete Confirmation Modal */
+.delete-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.delete-modal {
+    background: #1f2937;
+    border-radius: 12px;
+    padding: 2rem;
+    max-width: 450px;
+    width: 90%;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.delete-modal-icon {
+    width: 64px;
+    height: 64px;
+    background: rgba(239, 68, 68, 0.1);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1.5rem;
+    font-size: 2rem;
+}
+
+.delete-modal h3 {
+    margin: 0 0 0.75rem 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #fff;
+    text-align: center;
+}
+
+.delete-modal p {
+    margin: 0 0 2rem 0;
+    color: #9ca3af;
+    text-align: center;
+    line-height: 1.6;
+}
+
+.delete-modal-username {
+    color: #3b82f6;
+    font-weight: 600;
+}
+
+.delete-modal-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+
+.btn-danger {
+    background: #ef4444;
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.9375rem;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+    transform: translateY(-1px);
 }
 
 /* Buttons */

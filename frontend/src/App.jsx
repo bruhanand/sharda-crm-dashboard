@@ -7,8 +7,6 @@ import Dashboard from './components/Dashboard'
 import { useLeadData } from './hooks/useLeadData'
 import { initialFilters } from './utils/filterUtils'
 
-const tabs = ['KPI', 'Charts', 'Insights', 'Update Leads', 'Admin']
-
 function App() {
   // Authentication state
   const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem('authToken'))
@@ -16,6 +14,18 @@ function App() {
     const userData = localStorage.getItem('user')
     return userData ? JSON.parse(userData) : null
   })
+
+  // Dynamic tabs based on user role  
+  const tabs = useMemo(() => {
+    const baseTabs = ['KPI', 'Charts', 'Insights', 'Update Leads']
+
+    // Add Forecast and Admin tabs for admin users only (is_staff=True)
+    if (currentUser?.is_staff || currentUser?.is_admin || currentUser?.is_superuser) {
+      baseTabs.push('Forecast', 'Admin')
+    }
+
+    return baseTabs
+  }, [currentUser])
 
   // Filter and navigation state
   const [filters, setFilters] = useState(initialFilters)
@@ -27,10 +37,11 @@ function App() {
   })
 
   // Lead data from custom hook
-  const { leads, setLeads, kpiData, forecastSummary, insightData, isLoading, apiError } = useLeadData(
+  const { leads, setLeads, kpiData, forecastSummary, insightData, forecastData, isLoading, apiError } = useLeadData(
     filters,
     refreshKey,
-    isAuthenticated
+    isAuthenticated,
+    (currentUser?.is_staff || currentUser?.is_admin || currentUser?.is_superuser) || false
   )
 
   // Upload state
@@ -105,7 +116,7 @@ function App() {
   const handleLogin = (token) => {
     console.log('handleLogin called with token:', token ? 'present' : 'missing')
     setIsAuthenticated(true)
-    
+
     // Update current user from localStorage
     const userData = localStorage.getItem('user')
     if (userData) {
@@ -368,18 +379,16 @@ function App() {
 
           {/* Tab Navigation */}
           <nav className="tab-nav">
-            {tabs
-              .filter((tab) => tab !== 'Admin' || (currentUser && currentUser.is_admin))
-              .map((tab) => (
-                <button
-                  key={tab}
-                  className={`tab-button ${tab === activeTab ? 'active' : ''}`}
-                  type="button"
-                  onClick={() => setActiveTab(tab)}
-                >
-                  {tab}
-                </button>
-              ))}
+            {tabs.map((tab) => (
+              <button
+                key={tab}
+                className={`tab-button ${tab === activeTab ? 'active' : ''}`}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+              >
+                {tab}
+              </button>
+            ))}
           </nav>
 
           {/* Dashboard Content */}
@@ -389,6 +398,7 @@ function App() {
             leads={leads}
             kpiData={kpiData}
             forecastSummary={forecastSummary}
+            forecastData={forecastData}
             insightData={insightData}
             leadSearch={leadSearch}
             setLeadSearch={setLeadSearch}
@@ -425,3 +435,4 @@ function App() {
 }
 
 export default App
+

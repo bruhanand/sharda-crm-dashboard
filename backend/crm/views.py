@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django_ratelimit.decorators import ratelimit
 from django.utils.decorators import method_decorator
-from rest_framework import status, viewsets
+from rest_framework import status, viewsets, permissions
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -15,6 +15,13 @@ from .pagination import StandardResultsSetPagination
 from .serializers import LeadSerializer
 from .services import build_chart_payload, build_forecast, build_insights, compute_kpis
 from .admin_views import log_activity
+from .forecast_service import (
+    calculate_lead_forecast,
+    calculate_conversion_forecast,
+    forecast_by_dealer,
+    forecast_by_location,
+    forecast_by_kva_range
+)
 
 # File upload configuration
 MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
@@ -33,7 +40,7 @@ class LeadViewSet(viewsets.ModelViewSet):
     ordering_fields = ["updated_at", "order_value", "followup_count", "kva"]
     search_fields = ["enquiry_id", "dealer", "owner", "state", "city", "segment"]
     pagination_class = StandardResultsSetPagination
-    http_method_names = ["get", "patch", "put", "head", "options"]
+    http_method_names = ["get", "post", "patch", "put", "head", "options"]
 
     def perform_create(self, serializer):
         instance = serializer.save()
@@ -318,6 +325,101 @@ def _serialize_value(value):
     return value
 
 
+class LeadSearchView(APIView):
+    """
+    Search leads by enquiry_id for autocomplete.
+    Returns matching leads limited to 10 results.
+    """
+    
+    def get(self, request):
+        query = request.GET.get('q', '').strip()
+        
+        if not query or len(query) < 2:
+            return Response({"results": []})
+        
+        # Search by enquiry_id (case-insensitive)
+        leads = Lead.objects.filter(
+            enquiry_id__icontains=query
+        ).values(
+            'id', 'enquiry_id', 'dealer', 'corporate_name',
+            'lead_status', 'lead_stage', 'state', 'city',
+            'enquiry_date', 'owner'
+        )[:10]  # Limit to 10 results
+        
+        return Response({"results": list(leads)})
+
+
+class LeadFieldOptionsView(APIView):
+    """
+    Get unique values for a specific field to populate dropdowns.
+    Example: /api/lead-field-options?field=state
+    """
+    
+    # Define which fields can be queried
+    ALLOWED_FIELDS = [
+        'lead_status', 'lead_stage', 'enquiry_type', 'dealer',
+        'customer_type', 'dg_ownership', 'state', 'city', 'district',
+        'tehsil', 'zone', 'segment', 'sub_segment', 'source',
+        'source_from', 'kva_range', 'owner', 'phase', 'finance_company'
+    ]
+    
+    def get(self, request):
+        field = request.GET.get('field', '').strip()
+        
+        if not field or field not in self.ALLOWED_FIELDS:
+            return Response(
+                {"detail": f"Invalid field. Allowed fields: {', '.join(self.ALLOWED_FIELDS)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get distinct non-empty values for the field
+        values = (
+            Lead.objects
+            .exclude(**{f"{field}__isnull": True})
+            .exclude(**{f"{field}__exact": ""})
+            .values_list(field, flat=True)
+            .distinct()
+            .order_by(field)
+        )
+        
+        return Response({"field": field, "options": list(values)[:200]})  # Limit to 200 options
+
+
+class AllFieldOptionsView(APIView):
+    """
+    Get all field options in a single API call for dropdown population.
+    Returns a dictionary of field names to their unique values.
+    """
+    
+    # Define categorical fields that should have dropdown options
+    DROPDOWN_FIELDS = [
+        'lead_status', 'lead_stage', 'enquiry_type', 'dealer',
+        'customer_type', 'dg_ownership', 'state', 'city', 'district',
+        'tehsil', 'zone', 'segment', 'sub_segment', 'source',
+        'source_from', 'kva_range', 'owner', 'owner_code', 'phase', 
+        'finance_company', 'area_office', 'branch', 'location',
+        'referred_by', 'owner_status', 'events', 'loss_reason'
+    ]
+    
+    def get(self, request):
+        """GET /api/v1/leads/all-field-options/ - Returns all dropdown options"""
+        options = {}
+        
+        for field in self.DROPDOWN_FIELDS:
+            # Get distinct non-empty values for each field
+            values = (
+                Lead.objects
+                .exclude(**{f"{field}__isnull": True})
+                .exclude(**{f"{field}__exact": ""})
+                .values_list(field, flat=True)
+                .distinct()
+                .order_by(field)
+            )
+            options[field] = list(values)[:200]  # Limit to 200 options per field
+        
+        return Response(options)
+
+
 class HealthCheckView(APIView):
     """
     Health check endpoint for monitoring and load balancer checks.
@@ -349,3 +451,46 @@ class HealthCheckView(APIView):
             return Response(health_data, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         
         return Response(health_data, status=status.HTTP_200_OK)
+
+
+class ForecastView(APIView):
+    """
+    Forecast Analytics - Admin Only
+    Provides predictive analytics for leads, conversion, and sales forecasting
+    """
+    permission_classes = [permissions.IsAdminUser]
+    
+    @method_decorator(ratelimit(key='ip', rate='30/m', method='GET'))
+    def get(self, request):
+        """Generate forecast data based on historical trends"""
+        try:
+            # Use ALL data for ML forecasting (ignore filters for better predictions)
+            queryset = Lead.objects.all()
+            
+            # Get forecast parameters from query params
+            lead_months = int(request.GET.get('lead_months', 6))
+            conversion_months = int(request.GET.get('conversion_months', 6))
+            dealer_months = int(request.GET.get('dealer_months', 3))
+            kva_months = int(request.GET.get('kva_months', 6))
+            
+            # Calculate all forecasts
+            forecast_data = {
+                'leads_over_time': calculate_lead_forecast(queryset, lead_months),
+                'conversion_forecast': calculate_conversion_forecast(queryset, conversion_months),
+                'by_dealer': forecast_by_dealer(queryset, dealer_months),
+                'by_location': forecast_by_location(queryset),
+                'by_kva_range': forecast_by_kva_range(queryset, kva_months),
+            }
+            
+            return Response(forecast_data, status=status.HTTP_200_OK)
+            
+        except ValueError as e:
+            return Response(
+                {'error': 'Invalid parameter value', 'detail': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            return Response(
+                {'error': 'Forecast calculation failed', 'detail': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
