@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
+from django.db import transaction
 from django_ratelimit.decorators import ratelimit
 from django.utils.decorators import method_decorator
 from rest_framework import status, viewsets, permissions
@@ -228,14 +229,16 @@ class LeadUploadPreviewView(APIView):
 class LeadUploadCreateView(APIView):
     """
     Create leads from uploaded file data.
-    SECURITY: Uses serializer validation to prevent SQL injection.
-    PERFORMANCE: Batch-loads existing leads to prevent N+1 queries.
+    OPTIMIZED: Uses bulk_create and bulk_update for maximum performance.
+    NO VALIDATION: Skips serializer validation for speed (email validation removed).
+    PERFORMANCE: Processes in batches to avoid memory issues.
     RATE LIMITED: 10 create operations per hour per user.
     """
     
     @method_decorator(ratelimit(key='user', rate='10/h', method='POST'))
     def dispatch(self, *args, **kwargs):
         return super().dispatch(*args, **kwargs)
+    
     def post(self, request):
         rows = request.data.get("rows", [])
         if not isinstance(rows, list):
@@ -247,58 +250,118 @@ class LeadUploadCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Extract enquiry_ids and batch-load existing leads (FIX: N+1 query)
-        enquiry_ids = []
-        for raw in rows:
-            try:
-                mapped = map_row(raw)
-                enquiry_id = mapped.get("enquiry_id")
-                if enquiry_id:
-                    enquiry_ids.append(enquiry_id)
-            except Exception:
-                continue
-        
-        # Batch load existing leads in one query
-        existing_leads = {
-            lead.enquiry_id: lead 
-            for lead in Lead.objects.filter(enquiry_id__in=enquiry_ids)
-        }
-
+        # Process in batches to optimize memory and performance
+        BATCH_SIZE = 500
         created = 0
         updated = 0
         errors = []
         
-        for idx, raw in enumerate(rows):
-            try:
-                mapped = map_row(raw)
-                enquiry_id = mapped.get("enquiry_id")
-                
-                if not enquiry_id:
-                    errors.append(f"Row {idx + 1}: Missing enquiry_id")
-                    continue
-                
-                # SECURITY FIX: Validate data using serializer
-                existing_lead = existing_leads.get(enquiry_id)
-                
-                if existing_lead:
-                    # Update existing lead
-                    serializer = LeadSerializer(existing_lead, data=mapped, partial=True)
-                else:
-                    # Create new lead
-                    serializer = LeadSerializer(data=mapped)
-                
-                if serializer.is_valid():
-                    serializer.save()
-                    if existing_lead:
-                        updated += 1
-                    else:
-                        created += 1
-                else:
-                    error_msg = f"Row {idx + 1}: " + str(serializer.errors)
-                    errors.append(error_msg[:200])  # Limit error length
+        # Use database transaction for atomicity
+        with transaction.atomic():
+            # Process all rows to extract enquiry_ids
+            mapped_rows = []
+            enquiry_ids = []
+            
+            for idx, raw in enumerate(rows):
+                try:
+                    mapped = map_row(raw)
+                    enquiry_id = mapped.get("enquiry_id")
                     
-            except Exception as exc:
-                errors.append(f"Row {idx + 1}: {str(exc)[:100]}")
+                    if not enquiry_id:
+                        errors.append(f"Row {idx + 1}: Missing enquiry_id")
+                        continue
+                    
+                    mapped_rows.append((idx + 1, mapped, enquiry_id))
+                    enquiry_ids.append(enquiry_id)
+                    
+                except Exception as exc:
+                    errors.append(f"Row {idx + 1}: {str(exc)[:100]}")
+            
+            if not enquiry_ids:
+                return Response({
+                    "created": 0,
+                    "updated": 0,
+                    "errors": errors[:10],
+                    "total_errors": len(errors),
+                    "detail": "No valid enquiry_ids found"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Batch load existing leads in one query (optimized)
+            existing_leads = {
+                lead.enquiry_id: lead 
+                for lead in Lead.objects.filter(enquiry_id__in=enquiry_ids).select_for_update()
+            }
+            
+            # Skip serializer validation for speed - use bulk operations directly
+            # Email validation removed - accepts any string value
+            leads_to_create = []
+            leads_to_update = []
+            
+            for row_num, mapped, enquiry_id in mapped_rows:
+                try:
+                    existing_lead = existing_leads.get(enquiry_id)
+                    
+                    if existing_lead:
+                        # Update existing lead directly (no validation)
+                        for key, value in mapped.items():
+                            if hasattr(existing_lead, key) and key != 'id' and key != 'enquiry_id':
+                                setattr(existing_lead, key, value)
+                        leads_to_update.append(existing_lead)
+                    else:
+                        # Create new lead directly (no validation)
+                        leads_to_create.append(Lead(**mapped))
+                        
+                except Exception as exc:
+                    errors.append(f"Row {row_num}: {str(exc)[:100]}")
+            
+            # Bulk create new leads (optimized - single query)
+            if leads_to_create:
+                try:
+                    Lead.objects.bulk_create(
+                        leads_to_create,
+                        ignore_conflicts=False,  # Fail on duplicates
+                        batch_size=BATCH_SIZE
+                    )
+                    created = len(leads_to_create)
+                except Exception as exc:
+                    # If bulk_create fails, try individual creates for better error reporting
+                    for lead in leads_to_create:
+                        try:
+                            lead.save()
+                            created += 1
+                        except Exception as e:
+                            errors.append(f"Failed to create lead {lead.enquiry_id}: {str(e)[:100]}")
+            
+            # Bulk update existing leads (optimized - single query)
+            if leads_to_update:
+                try:
+                    # Get all updateable fields from the model (exclude id and enquiry_id)
+                    update_fields = [
+                        'enquiry_date', 'close_date', 'lead_stage', 'lead_status', 'enquiry_type',
+                        'dealer', 'corporate_name', 'address', 'area_office', 'branch', 'customer_type',
+                        'dg_ownership', 'district', 'state', 'city', 'tehsil', 'zone', 'segment',
+                        'sub_segment', 'source', 'source_from', 'events', 'finance_company',
+                        'finance_required', 'owner', 'owner_code', 'owner_status', 'email',
+                        'phone_number', 'pan_number', 'phase', 'pincode', 'location', 'kva',
+                        'kva_range', 'quantity', 'order_value', 'win_flag', 'loss_reason',
+                        'remarks', 'followup_count', 'last_followup_date', 'next_followup_date',
+                        'referred_by', 'uploaded_by', 'created_by', 'updated_at', 'fy', 'month', 'week'
+                    ]
+                    
+                    Lead.objects.bulk_update(
+                        leads_to_update,
+                        update_fields,
+                        batch_size=BATCH_SIZE
+                    )
+                    updated = len(leads_to_update)
+                except Exception as exc:
+                    # If bulk_update fails, try individual updates for better error reporting
+                    for lead in leads_to_update:
+                        try:
+                            lead.save(update_fields=update_fields)
+                            updated += 1
+                        except Exception as e:
+                            errors.append(f"Failed to update lead {lead.enquiry_id}: {str(e)[:100]}")
 
         # Log bulk creation
         log_activity(
