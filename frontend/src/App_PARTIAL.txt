@@ -1,0 +1,48 @@
+import { useEffect, useState, useMemo } from 'react'
+import './App.css'
+import { apiRequest } from './lib/api'
+import Login from './components/Login'
+import FilterBar from './components/FilterBar'
+import Dashboard from './components/Dashboard'
+import { useLeadData } from './hooks/useLeadData'
+import { initialFilters } from './utils/filterUtils'
+
+function App() {
+  // Authentication state
+  const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem('authToken'))
+  const [currentUser, setCurrentUser] = useState(() => {
+    const userData = localStorage.getItem('user')
+    return userData ? JSON.parse(userData) : null
+  })
+
+  // Dynamic tabs based on user role  
+  const tabs = useMemo(() => {
+    const baseTabs = ['KPI', 'Charts', 'Insights', 'Update Leads']
+    
+    // Check if user is admin - use is_staff first, fallback to is_admin or is_superuser
+    const isAdmin = currentUser?.is_staff || currentUser?.is_admin || currentUser?.is_superuser
+    
+    // Add Forecast and Admin tabs for admin users only
+    if (isAdmin) {
+      baseTabs.push('Forecast', 'Admin')
+    }
+    
+    return baseTabs
+  }, [currentUser])
+
+  // Filter and navigation state
+  const [filters, setFilters] = useState(initialFilters)
+  const [activeTab, setActiveTab] = useState(tabs[0])
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [dateDraft, setDateDraft] = useState({
+    start: initialFilters.startDate,
+    end: initialFilters.endDate,
+  })
+
+  // Lead data from custom hook
+  const { leads, setLeads, kpiData, forecastSummary, insightData, forecastData, isLoading, apiError } = useLeadData(
+    filters,
+    refreshKey,
+    isAuthenticated,
+    (currentUser?.is_staff || currentUser?.is_admin || currentUser?.is_superuser) || false
+  )

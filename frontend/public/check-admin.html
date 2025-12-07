@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Check Admin Status</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .status {
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .admin { background: #10b981; }
+        .not-admin { background: #ef4444; }
+        .not-logged-in { background: #f59e0b; }
+        pre {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Admin Status Checker</h1>
+    
+    <div id="status"></div>
+    
+    <h2>User Data in localStorage:</h2>
+    <pre id="userData"></pre>
+    
+    <button onclick="location.reload()">Refresh</button>
+    <button onclick="showInstructions()">Show Fix Instructions</button>
+    
+    <div id="instructions" style="display:none; margin-top: 20px; padding: 20px; background: #2a2a2a; border-radius: 8px;">
+        <h3>How to Fix Missing is_staff:</h3>
+        <ol>
+            <li><strong>Logout</strong> from your CRM application</li>
+            <li><strong>Login again</strong> with admin credentials</li>
+            <li>The new login will include <code>is_staff: true</code></li>
+            <li><strong>Refresh this page</strong> to verify</li>
+        </ol>
+        <p><strong>Why?</strong> The login API was updated to return <code>is_staff</code>, but existing sessions don't have it yet.</p>
+    </div>
+
+    <script>
+        const userData = localStorage.getItem('user');
+        const token = localStorage.getItem('authToken');
+        
+        if (!token) {
+            document.getElementById('status').innerHTML = `
+                <div class="status not-logged-in">
+                    <h2>❌ Not Logged In</h2>
+                    <p>No authToken found in localStorage. Please login first.</p>
+                </div>
+            `;
+            document.getElementById('userData').textContent = 'No user data found';
+        } else if (userData) {
+            const user = JSON.parse(userData);
+            const isStaff = user.is_staff === true;
+            
+            document.getElementById('status').innerHTML = `
+                <div class="status ${isStaff ? 'admin' : 'not-admin'}">
+                    <h2>${isStaff ? '✅ Admin User (is_staff=true)' : '⚠️ Not Admin (is_staff missing or false)'}</h2>
+                    <p><strong>Username:</strong> ${user.username || 'Unknown'}</p>
+                    <p><strong>is_staff:</strong> ${user.is_staff !== undefined ? user.is_staff : 'MISSING'}</p>
+                    <p><strong>is_admin:</strong> ${user.is_admin !== undefined ? user.is_admin : 'MISSING'}</p>
+                    ${isStaff ? 
+                        '<p>✅ <strong>Forecast tab should be visible!</strong></p>' : 
+                        '<p>❌ <strong>Forecast tab will NOT be visible</strong><br>You need to logout and login again to get the is_staff flag.</p>'
+                    }
+                </div>
+            `;
+            document.getElementById('userData').textContent = JSON.stringify(user, null, 2);
+        } else {
+            document.getElementById('status').innerHTML = `
+                <div class="status not-logged-in">
+                    <h2>⚠️ Logged In But No User Data</h2>
+                    <p>Token exists but user data not found. Try logging in again.</p>
+                </div>
+            `;
+            document.getElementById('userData').textContent = 'No user data in localStorage';
+        }
+        
+        function showInstructions() {
+            document.getElementById('instructions').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
