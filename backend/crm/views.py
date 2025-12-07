@@ -372,9 +372,15 @@ class LeadUploadCreateView(APIView):
             {'created': created, 'updated': updated, 'errors': len(errors)}
         )
 
+        # Collect created enquiry_ids for frontend
+        created_enquiry_ids = [
+            lead.enquiry_id for lead in leads_to_create
+        ] if leads_to_create else []
+        
         return Response({
             "created": created,
             "updated": updated,
+            "created_enquiry_ids": created_enquiry_ids,  # List of enquiry_ids that were created
             "errors": errors[:10] if errors else [],  # Limit errors returned
             "total_errors": len(errors)
         })

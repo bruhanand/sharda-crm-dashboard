@@ -261,26 +261,57 @@ function App() {
     }
 
     try {
-      await apiRequest('leads/upload/create/', {
+      const response = await apiRequest('leads/upload/create/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows }),
       })
 
-      setUploadMessage(`Created ${rows.length} new lead${rows.length !== 1 ? 's' : ''}.`)
+      // Use actual response data from backend (backward compatible)
+      const created = response.created || 0
+      const updated = response.updated || 0
+      const totalErrors = response.total_errors || 0
+      
+      // Build success message with accurate counts
+      let message = ''
+      if (created > 0 && updated > 0) {
+        message = `Created ${created} new lead${created !== 1 ? 's' : ''} and updated ${updated} existing lead${updated !== 1 ? 's' : ''}.`
+      } else if (created > 0) {
+        message = `Created ${created} new lead${created !== 1 ? 's' : ''}.`
+      } else if (updated > 0) {
+        message = `Updated ${updated} existing lead${updated !== 1 ? 's' : ''}.`
+      } else {
+        message = 'No leads were created or updated.'
+      }
+      
+      if (totalErrors > 0) {
+        message += ` (${totalErrors} error${totalErrors !== 1 ? 's' : ''} occurred)`
+      }
+      
+      setUploadMessage(message)
 
-      const createdIds = rows
-        .map(
-          (row) =>
-            row.enquiry_id ||
-            row.EnquiryID ||
-            row['Enquiry ID'] ||
-            row['Enquiry No'] ||
-            row.enquiryId ||
-            null
-        )
-        .filter(Boolean)
-        .map((value) => value.toString())
+      // Extract created IDs from backend response (backward compatible)
+      // Backend now returns created_enquiry_ids, but fallback to extracting from rows if not available
+      let createdIds = []
+      if (response.created_enquiry_ids && response.created_enquiry_ids.length > 0) {
+        // Use enquiry_ids from backend response (most accurate)
+        createdIds = response.created_enquiry_ids.map(id => id.toString())
+      } else if (created > 0) {
+        // Fallback: extract from rows (less accurate but backward compatible)
+        createdIds = rows
+          .slice(0, Math.min(created, rows.length))
+          .map(
+            (row) =>
+              row.enquiry_id ||
+              row.EnquiryID ||
+              row['Enquiry ID'] ||
+              row['Enquiry No'] ||
+              row.enquiryId ||
+              null
+          )
+          .filter(Boolean)
+          .map((value) => value.toString())
+      }
 
       if (createdIds.length) {
         setPendingNewLeadIds(createdIds)

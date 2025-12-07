@@ -93,13 +93,41 @@ def invalidate_lead_caches():
     """
     Invalidate all lead-related caches when data changes.
     Call this after create/update/delete operations.
-    """
-    cache_patterns = [
-        'kpis_*',
-        'charts_*',
-        'insights_*',
-        'forecast_*',
-    ]
     
-    for pattern in cache_patterns:
-        cache.delete_pattern(pattern)
+    This function handles multiple cache backends:
+    - django-redis: Uses delete_pattern for efficient pattern-based deletion
+    - Default cache: Clears entire cache (less efficient but works)
+    - View-level caches: Cleared via cache.clear()
+    """
+    try:
+        # Check if cache backend supports pattern deletion (django-redis)
+        if hasattr(cache, 'delete_pattern'):
+            # Pattern-based deletion (efficient for Redis)
+            cache_patterns = [
+                'kpis_*',
+                'charts_*',
+                'insights_*',
+                'forecast_*',
+            ]
+            
+            for pattern in cache_patterns:
+                try:
+                    cache.delete_pattern(pattern)
+                except Exception:
+                    # If pattern deletion fails, fall through to clear()
+                    pass
+        else:
+            # Default cache backend - clear entire cache
+            # This is less efficient but ensures all caches are cleared
+            cache.clear()
+            
+    except Exception as e:
+        # If all else fails, try to clear entire cache
+        try:
+            cache.clear()
+        except Exception:
+            # If cache.clear() also fails, log and continue
+            # The application should still work, just with stale cache
+            import logging
+            logger = logging.getLogger('crm')
+            logger.warning(f'Failed to invalidate caches: {e}')

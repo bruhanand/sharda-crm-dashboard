@@ -59,11 +59,17 @@ export const useLeadData = (filters, refreshKey, isAuthenticated, isAdmin = fals
                 }
 
                 const serverLeads = leadResponse.results ?? leadResponse
-                setLeads(serverLeads)
-                setKpiData(formatKpisResponse(kpiResponse))
-                // Build insights from client-side - this was working before!
-                setInsightData(buildInsightsFromDataset(serverLeads))
-                setForecastSummary(buildForecastFromDataset(serverLeads))
+                // Ensure serverLeads is always an array
+                const leadsArray = Array.isArray(serverLeads) ? serverLeads : []
+                setLeads(leadsArray)
+                
+                // Format KPI data from backend response
+                const formattedKpis = formatKpisResponse(kpiResponse)
+                setKpiData(formattedKpis)
+                
+                // Build insights from client-side using actual leads data
+                setInsightData(buildInsightsFromDataset(leadsArray))
+                setForecastSummary(buildForecastFromDataset(leadsArray))
 
                 // Set admin forecast data if available
                 if (isAdmin && forecastResponse) {
