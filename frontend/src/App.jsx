@@ -37,7 +37,7 @@ function App() {
   })
 
   // Lead data from custom hook
-  const { leads, setLeads, kpiData, forecastSummary, insightData, forecastData, isLoading, apiError } = useLeadData(
+  const { leads, setLeads, kpiData, forecastSummary, insightData, chartData, forecastData, isLoading, apiError } = useLeadData(
     filters,
     refreshKey,
     isAuthenticated,
@@ -46,6 +46,7 @@ function App() {
 
   // Upload state
   const [uploadFile, setUploadFile] = useState(null)
+  const [uploadFileName, setUploadFileName] = useState(null)
   const [uploadPreview, setUploadPreview] = useState(null)
   const [selectedNewRows, setSelectedNewRows] = useState({})
   const [uploadMessage, setUploadMessage] = useState(null)
@@ -155,8 +156,12 @@ function App() {
       return
     }
 
+    // Store filename for later use
+    setUploadFileName(uploadFile.name)
+
     const formData = new FormData()
     formData.append('file', uploadFile)
+    formData.append('filename', uploadFile.name)
     setUploadMessage('Uploading and reconciling leads…')
 
     try {
@@ -264,7 +269,10 @@ function App() {
       const response = await apiRequest('leads/upload/create/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows }),
+        body: JSON.stringify({ 
+          rows,
+          filename: uploadFileName || 'unknown'
+        }),
       })
 
       // Use actual response data from backend (backward compatible)
@@ -320,6 +328,7 @@ function App() {
       setUploadPreview(null)
       setSelectedNewRows({})
       setUploadFile(null)
+      setUploadFileName(null)
       setRefreshKey((key) => key + 1)
     } catch (error) {
       setUploadMessage(error.message || 'Unable to create new leads.')
@@ -431,6 +440,7 @@ function App() {
             forecastSummary={forecastSummary}
             forecastData={forecastData}
             insightData={insightData}
+            chartData={chartData}
             leadSearch={leadSearch}
             setLeadSearch={setLeadSearch}
             leadDrawer={leadDrawer}
@@ -458,6 +468,7 @@ function App() {
             handleBulkUpdateNewLeads={handleBulkUpdateNewLeads}
             refreshData={refreshData}
             onCloseCommentModal={handleCloseCommentModal}
+            currentUser={currentUser}
           />
         </main>
       </div>

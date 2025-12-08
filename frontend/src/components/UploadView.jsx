@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { HIGH_VALUE_THRESHOLD, rupeeFormatter, formatDateTime, formatDate } from '../lib/analytics'
+import { apiRequest } from '../lib/api'
 import AddLeadModal from './AddLeadModal'
 import './UploadView.css'
 
@@ -507,6 +508,330 @@ export const LeadDrawer = ({ drawer, onClose, onChange, onSave }) => {
     )
 }
 
+const UploadHistorySection = ({ onSelectUpload, selectedUpload, onImportClick, onExportClick, currentUser }) => {
+    const [uploadHistory, setUploadHistory] = useState([])
+    const [isLoading, setIsLoading] = useState(true)
+    const [deletingSource, setDeletingSource] = useState(null)
+    
+    // Check if user is admin
+    const isAdmin = currentUser?.is_staff || currentUser?.is_admin || currentUser?.is_superuser
+
+    const fetchUploadHistory = async () => {
+        try {
+            setIsLoading(true)
+            const response = await apiRequest('leads/upload/history/')
+            setUploadHistory(response.uploads || [])
+        } catch (error) {
+            console.error('Failed to fetch upload history:', error)
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    useEffect(() => {
+        fetchUploadHistory()
+    }, [])
+
+    const formatTimestamp = (timestamp) => {
+        try {
+            const date = new Date(timestamp)
+            return formatDateTime(date)
+        } catch {
+            return timestamp
+        }
+    }
+
+    const handleDeleteUpload = async (upload, event) => {
+        event.stopPropagation() // Prevent row selection when clicking delete
+        
+        const confirmMessage = `Are you sure you want to delete all ${upload.lead_count} lead${upload.lead_count !== 1 ? 's' : ''} from "${upload.filename}"?\n\nThis action cannot be undone.`
+        
+        if (!window.confirm(confirmMessage)) {
+            return
+        }
+        
+        try {
+            setDeletingSource(upload.upload_key)
+            
+            // Use fetch directly for DELETE with body
+            const token = localStorage.getItem('authToken')
+            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || '/api/v1'}/leads/upload/history/`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    ...(token && { 'Authorization': `Token ${token}` })
+                },
+                credentials: 'include',
+                body: JSON.stringify({ source: upload.upload_key })
+            })
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+                throw new Error(errorData.error || `HTTP ${response.status}`)
+            }
+            
+            const result = await response.json()
+            
+            // Refresh the upload history
+            await fetchUploadHistory()
+            
+            // Clear selection if the deleted upload was selected
+            if (selectedUpload === upload.upload_key) {
+                onSelectUpload(null)
+            }
+        } catch (error) {
+            console.error('Failed to delete upload:', error)
+            alert(`Failed to delete leads: ${error.message || 'Unknown error'}`)
+        } finally {
+            setDeletingSource(null)
+        }
+    }
+
+    if (isLoading) {
+        return (
+            <section className="lead-table-card">
+                <header className="table-header">
+                    <div>
+                        <p className="eyebrow">Upload Registry</p>
+                        <h2>Uploaded Files</h2>
+                    </div>
+                </header>
+                <div style={{ padding: '40px', textAlign: 'center', color: '#7f859c' }}>
+                    Loading upload history...
+                </div>
+            </section>
+        )
+    }
+
+    if (uploadHistory.length === 0) {
+        return (
+            <section className="lead-table-card">
+                <header className="table-header">
+                    <div>
+                        <p className="eyebrow">Upload Registry</p>
+                        <h2>Uploaded Files (0)</h2>
+                    </div>
+                    <div className="lead-table-actions">
+                        <button className="btn-primary" type="button" onClick={onImportClick}>
+                            Import Leads
+                        </button>
+                    </div>
+                </header>
+                <div style={{ padding: '40px', textAlign: 'center', color: '#7f859c' }}>
+                    <p>No files uploaded yet.</p>
+                    <p style={{ marginTop: '8px', fontSize: '14px' }}>Click "Import Leads" to upload your first file.</p>
+                </div>
+            </section>
+        )
+    }
+
+    return (
+        <section className="lead-table-card">
+            <header className="table-header">
+                <div>
+                    <p className="eyebrow">Upload Registry</p>
+                    <h2>Uploaded Files ({uploadHistory.length})</h2>
+                </div>
+                <div className="lead-table-actions">
+                    <button className="btn-primary" type="button" onClick={onImportClick}>
+                        Import Leads
+                    </button>
+                    <button className="btn-primary" type="button" onClick={onExportClick}>
+                        Export
+                    </button>
+                </div>
+            </header>
+            <div className="table-scroll">
+                <div className="upload-history-list-full">
+                    {uploadHistory.map((upload, index) => (
+                        <div
+                            key={index}
+                            className={`upload-history-item-full ${selectedUpload === upload.upload_key ? 'selected' : ''}`}
+                            onClick={() => onSelectUpload(upload.upload_key)}
+                        >
+                            <div className="upload-history-item-main-full">
+                                <div className="upload-history-filename-full">{upload.filename}</div>
+                                <div className="upload-history-meta-full">
+                                    <span className="upload-history-date-full">{formatTimestamp(upload.timestamp)}</span>
+                                    <span className="upload-history-count-badge-full">{upload.lead_count} lead{upload.lead_count !== 1 ? 's' : ''}</span>
+                                </div>
+                            </div>
+                            {isAdmin && (
+                                <button
+                                    className="upload-history-delete-btn"
+                                    onClick={(e) => handleDeleteUpload(upload, e)}
+                                    disabled={deletingSource === upload.upload_key}
+                                    title={`Delete all ${upload.lead_count} lead${upload.lead_count !== 1 ? 's' : ''} from this upload`}
+                                >
+                                    {deletingSource === upload.upload_key ? '…' : '🗑️'}
+                                </button>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </section>
+    )
+}
+
+const ManualLeadsSection = ({ leadTableData, handleLeadRowClick, onAddLeadClick }) => {
+    const [manualLeads, setManualLeads] = useState([])
+    const [isLoading, setIsLoading] = useState(true)
+    const [isExpanded, setIsExpanded] = useState(false)
+
+    useEffect(() => {
+        const fetchManualLeads = async () => {
+            try {
+                setIsLoading(true)
+                const response = await apiRequest('leads/manual/')
+                setManualLeads(response.results || response || [])
+            } catch (error) {
+                console.error('Failed to fetch manual leads:', error)
+                // Fallback: filter from leadTableData if API fails
+                if (leadTableData) {
+                    const manual = leadTableData.filter(lead => lead.source === 'manual')
+                    setManualLeads(manual)
+                }
+            } finally {
+                setIsLoading(false)
+            }
+        }
+        fetchManualLeads()
+    }, [leadTableData])
+
+    if (isLoading) {
+        return (
+            <section className="lead-table-card" style={{ marginTop: '16px' }}>
+                <header className="table-header">
+                    <div>
+                        <p className="eyebrow">Manual Leads</p>
+                        <h2>Manually Created Leads</h2>
+                    </div>
+                </header>
+                <div style={{ padding: '40px', textAlign: 'center', color: '#7f859c' }}>
+                    Loading manual leads...
+                </div>
+            </section>
+        )
+    }
+
+    if (manualLeads.length === 0) {
+        return (
+            <section className="lead-table-card" style={{ marginTop: '16px' }}>
+                <header className="table-header">
+                    <div>
+                        <p className="eyebrow">Manual Leads</p>
+                        <h2>Manually Created Leads (0)</h2>
+                    </div>
+                    <div className="lead-table-actions">
+                        <button className="btn-primary" type="button" onClick={onAddLeadClick}>
+                            + Add Lead
+                        </button>
+                    </div>
+                </header>
+                <div style={{ padding: '40px', textAlign: 'center', color: '#7f859c' }}>
+                    <p>No manual leads created yet.</p>
+                    <p style={{ marginTop: '8px', fontSize: '14px' }}>Click "+ Add Lead" to create your first manual lead.</p>
+                </div>
+            </section>
+        )
+    }
+
+    return (
+        <section className="lead-table-card" style={{ marginTop: '16px' }}>
+            <header className="table-header">
+                <div>
+                    <p className="eyebrow">Manual Leads</p>
+                    <h2>Manually Created Leads ({manualLeads.length})</h2>
+                </div>
+                <div className="lead-table-actions">
+                    <button className="btn-primary" type="button" onClick={onAddLeadClick}>
+                        + Add Lead
+                    </button>
+                    <button 
+                        className="upload-history-toggle"
+                        onClick={() => setIsExpanded(!isExpanded)}
+                        style={{ 
+                            background: 'transparent', 
+                            border: 'none', 
+                            color: '#7f859c', 
+                            fontSize: '14px',
+                            cursor: 'pointer',
+                            padding: '8px 12px'
+                        }}
+                    >
+                        {isExpanded ? '▼ Collapse' : '▶ Expand'}
+                    </button>
+                </div>
+            </header>
+            {isExpanded && (
+                <div className="table-scroll">
+                    <table className="modern-table">
+                        <thead>
+                            <tr>
+                                <th>ID / Enquiry No</th>
+                                <th>Dates</th>
+                                <th>Customer</th>
+                                <th>Dealer</th>
+                                <th>Employee</th>
+                                <th>Status</th>
+                                <th>Stage</th>
+                                <th>Contact</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {manualLeads.map((lead, index) => (
+                                <tr key={`${lead.enquiry_id}-${index}`} onClick={() => handleLeadRowClick(lead)}>
+                                    <td>
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <span className="font-mono" style={{ color: '#fff' }}>{lead.id}</span>
+                                            <span className="font-mono">{lead.enquiry_id}</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                            <span style={{ fontSize: '12px', color: '#e4e4e7' }}>{formatDate(lead.enquiry_date)}</span>
+                                            <span style={{ fontSize: '11px', color: '#71717a' }}>Upd: {formatDate(lead.updated_at)}</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <span style={{ fontWeight: 500 }}>{lead.corporate_name || lead.customer_type || '—'}</span>
+                                            <span style={{ fontSize: '11px', color: '#a1a1aa' }}>{lead.state || '—'}</span>
+                                        </div>
+                                    </td>
+                                    <td>{lead.dealer || '—'}</td>
+                                    <td>
+                                        <div className="smart-cell-employee">
+                                            <span>{lead.owner || '—'}</span>
+                                            {lead.owner_code && (
+                                                <span className="emp-code-badge">{lead.owner_code}</span>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span className={`status-badge ${lead.lead_status === 'Closed' ? 'status-closed' : 'status-open'}`}>
+                                            {lead.lead_status || 'Open'}
+                                        </span>
+                                    </td>
+                                    <td>{lead.lead_stage || '—'}</td>
+                                    <td>
+                                        <div style={{ display: 'flex', flexDirection: 'column', fontSize: '12px' }}>
+                                            <span>{lead.phone_number || '—'}</span>
+                                            <span style={{ color: '#71717a' }}>{lead.email || ''}</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </section>
+    )
+}
+
 export default function UploadView({
     filters,
     uploadFile,
@@ -538,29 +863,20 @@ export default function UploadView({
     handleSkipComments,
     selectedLeadsForComment,
     onCloseCommentModal,
+    currentUser,
 }) {
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
     const [isAddLeadModalOpen, setIsAddLeadModalOpen] = useState(false)
+    const [selectedUpload, setSelectedUpload] = useState(null)
 
-    const filteredLeads = React.useMemo(() => {
-        if (!leadSearch || !leadSearch.trim()) {
-            return leadTableData || []
+    
+    const handleSelectUpload = (uploadKey) => {
+        if (selectedUpload === uploadKey) {
+            setSelectedUpload(null) // Deselect if clicking the same
+        } else {
+            setSelectedUpload(uploadKey)
         }
-        const lowerSearch = leadSearch.toLowerCase().trim()
-        return (leadTableData || []).filter((lead) => {
-            return (
-                (lead.enquiry_id && lead.enquiry_id.toLowerCase().includes(lowerSearch)) ||
-                (lead.dealer && lead.dealer.toLowerCase().includes(lowerSearch)) ||
-                (lead.owner && lead.owner.toLowerCase().includes(lowerSearch)) ||
-                (lead.owner_code && lead.owner_code.toLowerCase().includes(lowerSearch)) ||
-                (lead.phone_number && lead.phone_number.includes(lowerSearch)) ||
-                (lead.email && lead.email.toLowerCase().includes(lowerSearch)) ||
-                (lead.corporate_name && lead.corporate_name.toLowerCase().includes(lowerSearch)) ||
-                (lead.customer_type && lead.customer_type.toLowerCase().includes(lowerSearch)) ||
-                (lead.state && lead.state.toLowerCase().includes(lowerSearch))
-            )
-        })
-    }, [leadTableData, leadSearch])
+    }
 
     return (
         <div className="add-leads-layout">
@@ -584,115 +900,23 @@ export default function UploadView({
                 />
             )}
 
-            <section className="lead-table-card">
-                <header className="table-header">
-                    <div>
-                        <p className="eyebrow">Lead Registry</p>
-                        <h2>
-                            Leads ({filteredLeads.length}
-                            {leadTableData?.length === 200 ? '+' : ''})
-                        </h2>
-                    </div>
-                    <div className="lead-table-actions">
-                        <div className="search-input-wrapper">
-                            <input
-                                type="search"
-                                className="search-input"
-                                placeholder="Search leads..."
-                                value={leadSearch}
-                                onChange={(e) => setLeadSearch(e.target.value)}
-                            />
-                        </div>
-                        <button className="btn-primary" type="button" onClick={() => setIsAddLeadModalOpen(true)}>
-                            + Add Lead
-                        </button>
-                        <button className="btn-primary" type="button" onClick={() => setIsUploadModalOpen(true)}>
-                            Import Leads
-                        </button>
-                        <button className="btn-primary" type="button">
-                            Export
-                        </button>
-                    </div>
-                </header>
-                <div className="table-scroll">
-                    <table className="modern-table">
-                        <thead>
-                            <tr>
-                                <th>ID / Enquiry No</th>
-                                <th>Dates</th>
-                                <th>Customer</th>
-                                <th>Dealer Profile</th>
-                                <th>Employee</th>
-                                <th>Status</th>
-                                <th>Stage</th>
-                                <th>Contact</th>
+            <UploadHistorySection 
+                onSelectUpload={handleSelectUpload}
+                selectedUpload={selectedUpload}
+                onImportClick={() => setIsUploadModalOpen(true)}
+                onExportClick={() => {
+                    // Export functionality - can be implemented later
+                    alert('Export functionality coming soon')
+                }}
+                currentUser={currentUser}
+            />
 
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredLeads.map((lead, index) => (
-                                <tr key={`${lead.enquiry_id}-${index}`} onClick={() => handleLeadRowClick(lead)}>
-                                    <td>
-                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                            <span className="font-mono" style={{ color: '#fff' }}>{lead.id}</span>
-                                            <span className="font-mono">{lead.enquiry_id}</span>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                            <span style={{ fontSize: '12px', color: '#e4e4e7' }}>{formatDate(lead.enquiry_date)}</span>
-                                            <span style={{ fontSize: '11px', color: '#71717a' }}>Upd: {formatDate(lead.updated_at)}</span>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                            <span style={{ fontWeight: 500 }}>{lead.corporate_name || lead.customer_type || '—'}</span>
-                                            <span style={{ fontSize: '11px', color: '#a1a1aa' }}>{lead.state || '—'}</span>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div className="smart-cell-dealer">
-                                            <span className="dealer-name">{lead.dealer || '—'}</span>
-                                            <span className="dealer-meta">
-                                                {lead.branch ? `${lead.branch} • ` : ''}
-                                                {lead.location || ''}
-                                            </span>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div className="smart-cell-employee">
-                                            <span>{lead.owner || '—'}</span>
-                                            {lead.owner_code && (
-                                                <span className="emp-code-badge">{lead.owner_code}</span>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <span className={`status-badge ${lead.lead_status === 'Closed' ? 'status-closed' : 'status-open'}`}>
-                                            {lead.lead_status || 'Open'}
-                                        </span>
-                                    </td>
-                                    <td>{lead.lead_stage || '—'}</td>
-                                    <td>
-                                        <div style={{ display: 'flex', flexDirection: 'column', fontSize: '12px' }}>
-                                            <span>{lead.phone_number || '—'}</span>
-                                            <span style={{ color: '#71717a' }}>{lead.email || ''}</span>
-                                        </div>
-                                    </td>
+            <ManualLeadsSection 
+                leadTableData={leadTableData}
+                handleLeadRowClick={handleLeadRowClick}
+                onAddLeadClick={() => setIsAddLeadModalOpen(true)}
+            />
 
-                                </tr>
-                            ))}
-                            {filteredLeads.length === 0 && (
-                                <tr>
-                                    <td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: '#71717a' }}>
-                                        {leadSearch ? 'No leads match your search.' : 'No leads match the current filters.'}
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </section>
 
             <NewLeadCommentModal
                 isOpen={showCommentModal}

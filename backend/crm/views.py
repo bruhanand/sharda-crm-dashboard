@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.db import transaction
 from django_ratelimit.decorators import ratelimit
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from rest_framework import status, viewsets, permissions
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -45,6 +46,10 @@ class LeadViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         instance = serializer.save()
+        # Set source to 'manual' for manually created leads if not already set
+        if not instance.source:
+            instance.source = 'manual'
+            instance.save(update_fields=['source'])
         log_activity(
             self.request.user,
             'create_lead',
@@ -136,6 +141,9 @@ class LeadUploadPreviewView(APIView):
         uploaded_file = request.FILES.get("file")
         if not uploaded_file:
             return Response({"detail": "file is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get filename from form data or file object
+        filename = request.data.get("filename") or uploaded_file.name
 
         # Validate file size
         if uploaded_file.size > MAX_UPLOAD_SIZE:
@@ -203,10 +211,10 @@ class LeadUploadPreviewView(APIView):
         log_activity(
             request.user,
             'upload_file',
-            f'Previewed upload file: {uploaded_file.name} ({len(records)} records)',
+            f'Previewed upload file: {filename} ({len(records)} records)',
             request,
             {
-                'filename': uploaded_file.name,
+                'filename': filename,
                 'total_records': len(records),
                 'updated': len(updated),
                 'new': len(new_candidates),
@@ -221,7 +229,8 @@ class LeadUploadPreviewView(APIView):
                 "updated_preview": updated[:15],
                 "errors": errors[:10] if errors else [],  # Limit error messages
                 "total_errors": len(errors),
-                "total_records": len(records)
+                "total_records": len(records),
+                "filename": filename
             }
         )
 
@@ -250,11 +259,17 @@ class LeadUploadCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Get filename from request (optional, defaults to "unknown")
+        filename = request.data.get("filename", "unknown")
+        
         # Process in batches to optimize memory and performance
         BATCH_SIZE = 500
         created = 0
         updated = 0
         errors = []
+        
+        # Use filename as source for uploaded leads
+        source_value = filename
         
         # Use database transaction for atomicity
         with transaction.atomic():
@@ -304,12 +319,24 @@ class LeadUploadCreateView(APIView):
                     if existing_lead:
                         # Update existing lead directly (no validation)
                         for key, value in mapped.items():
-                            if hasattr(existing_lead, key) and key != 'id' and key != 'enquiry_id':
+                            # Skip id, enquiry_id, and updated_at (let Django auto-update it)
+                            if hasattr(existing_lead, key) and key not in ('id', 'enquiry_id', 'updated_at'):
                                 setattr(existing_lead, key, value)
+                        # Set source to filename for this upload batch
+                        existing_lead.source = source_value
+                        # Explicitly update updated_at to current time for bulk operations
+                        existing_lead.updated_at = timezone.now()
                         leads_to_update.append(existing_lead)
                     else:
                         # Create new lead directly (no validation)
-                        leads_to_create.append(Lead(**mapped))
+                        # Remove updated_at from mapped if present (let Django set it)
+                        mapped_for_create = {k: v for k, v in mapped.items() if k != 'updated_at'}
+                        new_lead = Lead(**mapped_for_create)
+                        # Set source to filename for this upload batch
+                        new_lead.source = source_value
+                        # Set updated_at to current time for new leads
+                        new_lead.updated_at = timezone.now()
+                        leads_to_create.append(new_lead)
                         
                 except Exception as exc:
                     errors.append(f"Row {row_num}: {str(exc)[:100]}")
@@ -345,7 +372,8 @@ class LeadUploadCreateView(APIView):
                         'phone_number', 'pan_number', 'phase', 'pincode', 'location', 'kva',
                         'kva_range', 'quantity', 'order_value', 'win_flag', 'loss_reason',
                         'remarks', 'followup_count', 'last_followup_date', 'next_followup_date',
-                        'referred_by', 'uploaded_by', 'created_by', 'updated_at', 'fy', 'month', 'week'
+                        'referred_by', 'uploaded_by', 'created_by', 'source', 'fy', 'month', 'week'
+                        # Note: updated_at is excluded - Django will auto-update it when save() is called
                     ]
                     
                     Lead.objects.bulk_update(
@@ -367,9 +395,14 @@ class LeadUploadCreateView(APIView):
         log_activity(
             request.user,
             'bulk_create_leads',
-            f'Bulk created {created} and updated {updated} leads',
+            f'Bulk created {created} and updated {updated} leads from file: {filename}',
             request,
-            {'created': created, 'updated': updated, 'errors': len(errors)}
+            {
+                'filename': filename,
+                'created': created, 
+                'updated': updated, 
+                'errors': len(errors)
+            }
         )
 
         # Collect created enquiry_ids for frontend
@@ -416,6 +449,154 @@ class LeadSearchView(APIView):
         )[:10]  # Limit to 10 results
         
         return Response({"results": list(leads)})
+
+
+class UploadHistoryView(APIView):
+    """
+    Get upload history - list of all uploaded files with timestamps and lead counts.
+    Returns unique filenames with their upload timestamps and number of leads.
+    Also supports DELETE to remove all leads from a specific upload.
+    """
+    
+    def get(self, request):
+        # Get all leads with source populated (excluding manual leads)
+        leads_with_source = Lead.objects.exclude(
+            source__isnull=True
+        ).exclude(
+            source=''
+        ).exclude(
+            source='manual'  # Exclude manual leads from upload history
+        ).values('source', 'updated_at')
+        
+        # Group by source (filename) and get latest timestamp
+        upload_history = {}
+        
+        for item in leads_with_source:
+            source = item['source']
+            timestamp = item['updated_at']
+            
+            if not source:
+                continue
+                
+            if source not in upload_history:
+                upload_history[source] = {
+                    'filename': source,
+                    'timestamp': timestamp.isoformat() if timestamp else '',
+                    'upload_key': source,  # Use source as key for filtering
+                    'lead_count': 0
+                }
+            
+            upload_history[source]['lead_count'] += 1
+            # Update timestamp to latest
+            if timestamp and upload_history[source]['timestamp']:
+                try:
+                    if timestamp > upload_history[source]['timestamp']:
+                        upload_history[source]['timestamp'] = timestamp.isoformat()
+                except:
+                    upload_history[source]['timestamp'] = timestamp.isoformat() if timestamp else ''
+        
+        # Convert to list and sort by timestamp (newest first)
+        history_list = list(upload_history.values())
+        history_list.sort(key=lambda x: x['timestamp'], reverse=True)
+        
+        # Get manual leads count
+        manual_leads_count = Lead.objects.filter(source='manual').count()
+        
+        return Response({
+            'uploads': history_list,
+            'total_uploads': len(history_list),
+            'manual_leads_count': manual_leads_count
+        })
+    
+    def delete(self, request):
+        """
+        Delete all leads from a specific upload (by source/filename).
+        Expects 'source' or 'upload_key' in request data.
+        Admin-only endpoint.
+        """
+        # Check if user is admin
+        if not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response(
+                {'error': 'Admin permissions required'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        source = request.data.get('source') or request.data.get('upload_key')
+        
+        if not source:
+            return Response(
+                {'error': 'Source (filename) is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Prevent deletion of manual leads
+        if source == 'manual':
+            return Response(
+                {'error': 'Cannot delete manual leads via this endpoint'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get leads to delete
+        leads_to_delete = Lead.objects.filter(source=source)
+        deleted_count = leads_to_delete.count()
+        
+        if deleted_count == 0:
+            return Response(
+                {'error': f'No leads found with source: {source}'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Log the deletion before deleting
+        enquiry_ids = list(leads_to_delete.values_list('enquiry_id', flat=True)[:10])  # Sample for logging
+        log_activity(
+            request.user,
+            'delete_upload_leads',
+            f'Deleted {deleted_count} leads from upload: {source}',
+            request,
+            {
+                'source': source,
+                'deleted_count': deleted_count,
+                'sample_enquiry_ids': enquiry_ids
+            }
+        )
+        
+        # Delete the leads
+        leads_to_delete.delete()
+        
+        return Response({
+            'message': f'Successfully deleted {deleted_count} leads from upload: {source}',
+            'deleted_count': deleted_count,
+            'source': source
+        })
+
+
+class ManualLeadsView(APIView):
+    """
+    Get manual leads - leads created manually (source='manual').
+    Returns paginated list of manual leads.
+    """
+    
+    def get(self, request):
+        queryset = filter_queryset(request)
+        # Filter only manual leads
+        manual_leads = queryset.filter(source='manual')
+        
+        # Apply pagination
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(manual_leads, request)
+        
+        if page is not None:
+            serializer = LeadSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        serializer = LeadSerializer(manual_leads, many=True)
+        return Response(serializer.data)
 
 
 class LeadFieldOptionsView(APIView):

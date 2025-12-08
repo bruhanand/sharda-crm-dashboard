@@ -21,6 +21,7 @@ const Dashboard = ({
     forecastSummary,
     forecastData,
     insightData,
+    chartData,
     leadSearch,
     setLeadSearch,
     leadDrawer,
@@ -48,8 +49,15 @@ const Dashboard = ({
     handleBulkUpdateNewLeads,
     refreshData,
     onCloseCommentModal,
+    currentUser,
 }) => {
-    const chartVisuals = useMemo(() => buildChartsVisuals(leads), [leads])
+    // Use backend chartData if available (contains all leads), otherwise fallback to building from paginated leads
+    const chartVisuals = useMemo(() => {
+        if (chartData) {
+            return chartData
+        }
+        return buildChartsVisuals(leads)
+    }, [chartData, leads])
     const topDealers = useMemo(() => buildTopEntities(leads, 'dealer'), [leads])
     const topEmployees = useMemo(() => buildTopEntities(leads, 'owner'), [leads])
 
@@ -135,6 +143,7 @@ const Dashboard = ({
                             form: { ...prev.form, [id]: { ...prev.form[id], [field]: value } }
                         }))}
                         handleNewLeadInfoSave={handleBulkUpdateNewLeads}
+                        currentUser={currentUser}
                     />
                 )
 
