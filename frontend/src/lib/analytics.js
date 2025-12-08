@@ -35,10 +35,10 @@ export const buildKpisFromDataset = (dataset = []) => {
   const closedCount = total - openLeads.length
   const closedLeads = dataset.filter((lead) => lead.lead_status === 'Closed')
 
-  // Won = lead_stage contains BOTH 'closed won' AND 'order booked' (case-insensitive)
+  // Won = lead_stage equals 'Closed-Won' OR 'Order Booked' (case-insensitive)
   const wonLeads = dataset.filter((lead) => {
-    const stage = (lead.lead_stage || '').toLowerCase()
-    return stage.includes('closed won') && stage.includes('order booked')
+    const stage = (lead.lead_stage || '').trim().toLowerCase()
+    return stage === 'closed-won' || stage === 'order booked'
   })
 
   // Lost = closed - won
@@ -267,7 +267,8 @@ export const buildTopEntities = (dataset = [], key) => {
       acc[label] = { label, total: 0, won: 0, orderValue: 0 }
     }
     acc[label].total += 1
-    if (lead.lead_stage && /won/i.test(lead.lead_stage)) {
+    const stage = (lead.lead_stage || '').trim().toLowerCase()
+    if (stage === 'closed-won' || stage === 'order booked') {
       acc[label].won += 1
     }
     const value = Number(lead.order_value) || 0
@@ -350,9 +351,9 @@ export const buildChartsVisuals = (leads = []) => {
     const segment = lead.segment || 'Unspecified'
     segmentDistribution[segment] = (segmentDistribution[segment] || 0) + 1
 
-    const stage = (lead.lead_stage || '').toLowerCase()
+    const stage = (lead.lead_stage || '').trim().toLowerCase()
     const isWon =
-      (stage.includes('closed won') && stage.includes('order booked')) ||
+      (stage === 'closed-won' || stage === 'order booked') ||
       Boolean(lead.win_flag)
 
     if (lead.lead_status === 'Open') {

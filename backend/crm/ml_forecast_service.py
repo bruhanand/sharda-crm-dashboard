@@ -370,8 +370,8 @@ def ml_forecast_conversion(queryset, months_to_forecast=6):
         .annotate(
             total=Count('id'),
             won=Count('id', filter=(
-                Q(lead_stage__icontains='closed won') | 
-                Q(lead_stage__icontains='order booked')
+                Q(lead_stage__iexact='Closed-Won') | 
+                Q(lead_stage__iexact='Order Booked')
             ))
         )
         .order_by('month_truncated')

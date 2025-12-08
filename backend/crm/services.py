@@ -32,7 +32,7 @@ def compute_kpis(queryset):
     - Total leads: count of all leads
     - Open leads: count where lead_status='Open'
     - Closed leads: total - open
-    - Won leads: count where lead_stage contains 'closed won' or 'order booked'
+    - Won leads: count where lead_stage equals 'Closed-Won' OR 'Order Booked'
     - Lost leads: closed - won
     - Conversion rate: (won / total) * 100
     - Avg lead age: average of lead_age_days for ALL leads (not just open)
@@ -44,12 +44,11 @@ def compute_kpis(queryset):
     closed_leads_list = [
         lead for lead in leads if lead.lead_status == "Closed"]
 
-    # Won leads: lead_stage contains BOTH 'closed won' AND 'order booked' (case-insensitive)
+    # Won leads: lead_stage equals 'Closed-Won' OR 'Order Booked' (case-insensitive)
     won_leads_list = [
         lead for lead in leads
         if lead.lead_stage
-        and 'closed won' in lead.lead_stage.lower()
-        and 'order booked' in lead.lead_stage.lower()
+        and (lead.lead_stage.strip().lower() == 'closed-won' or lead.lead_stage.strip().lower() == 'order booked')
     ]
 
     def _sum(values):
@@ -108,8 +107,7 @@ def build_chart_payload(queryset):
     won_count = len([
         lead for lead in leads
         if lead.lead_stage
-        and "closed won" in lead.lead_stage.lower()
-        and "order booked" in lead.lead_stage.lower()
+        and (lead.lead_stage.strip().lower() == 'closed-won' or lead.lead_stage.strip().lower() == 'order booked')
     ])
 
     closed_count = total - open_count

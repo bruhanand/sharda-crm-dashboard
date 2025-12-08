@@ -90,8 +90,8 @@ def calculate_conversion_forecast(queryset, months=6):
         .annotate(
             total=Count('id'),
             won=Count('id', filter=(
-                Q(lead_stage__icontains='closed won') | 
-                Q(lead_stage__icontains='order booked')
+                Q(lead_stage__iexact='Closed-Won') | 
+                Q(lead_stage__iexact='Order Booked')
             ))
         )
         .order_by('month_truncated')
@@ -145,12 +145,12 @@ def forecast_by_dealer(queryset, months=3):
         .annotate(
             total_leads=Count('id'),
             won_leads=Count('id', filter=(
-                Q(lead_stage__icontains='closed won') | 
-                Q(lead_stage__icontains='order booked')
+                Q(lead_stage__iexact='Closed-Won') | 
+                Q(lead_stage__iexact='Order Booked')
             )),
             avg_order_value=Avg('order_value', filter=(
-                Q(lead_stage__icontains='closed won') | 
-                Q(lead_stage__icontains='order booked')
+                Q(lead_stage__iexact='Closed-Won') | 
+                Q(lead_stage__iexact='Order Booked')
             ))
         )
         .order_by('-won_leads')[:15]  # Top 15 dealers
@@ -191,8 +191,8 @@ def forecast_by_location(queryset):
         .annotate(
             total_leads=Count('id'),
             won_leads=Count('id', filter=(
-                Q(lead_stage__icontains='closed won') | 
-                Q(lead_stage__icontains='order booked')
+                Q(lead_stage__iexact='Closed-Won') | 
+                Q(lead_stage__iexact='Order Booked')
             ))
         )
         .order_by('-total_leads')

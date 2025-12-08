@@ -17,7 +17,7 @@ def compute_kpis(queryset):
     - Total leads: count of all leads
     - Open leads: count where lead_status='Open'
     - Closed leads: total - open
-   - Won leads: count where lead_stage contains 'closed won' or 'order booked'
+   - Won leads: count where lead_stage equals 'Closed-Won' OR 'Order Booked'
     - Lost leads: closed - won
     - Conversion rate: (won / total) * 100
     - Avg lead age: average of lead_age_days for ALL leads (not just open)
@@ -31,16 +31,16 @@ def compute_kpis(queryset):
     stats = queryset.aggregate(
         total_leads=Count('id'),
         open_leads=Count('id', filter=Q(lead_status='Open')),
-        # Won leads: lead_stage contains BOTH 'closed won' AND 'order booked' (case-insensitive)
+        # Won leads: lead_stage equals 'Closed-Won' OR 'Order Booked' (case-insensitive)
         won_leads=Count('id', filter=(
-            Q(lead_stage__icontains='closed won') &
-            Q(lead_stage__icontains='order booked')
+            Q(lead_stage__iexact='Closed-Won') |
+            Q(lead_stage__iexact='Order Booked')
         )),
         pipeline_value=Sum('order_value', filter=Q(
             lead_status='Open'), default=0),
         won_value=Sum('order_value', filter=(
-            Q(lead_stage__icontains='closed won') |
-            Q(lead_stage__icontains='order booked')
+            Q(lead_stage__iexact='Closed-Won') |
+            Q(lead_stage__iexact='Order Booked')
         ), default=0),
         # Average close time for CLOSED leads only
         avg_close_days=Avg('close_time_days', filter=Q(lead_status='Closed')),
@@ -87,8 +87,8 @@ def build_chart_payload(queryset):
         total_leads=Count('id'),
         open_leads=Count('id', filter=Q(lead_status='Open')),
         won_leads=Count('id', filter=(
-            Q(lead_stage__icontains='closed won') &
-            Q(lead_stage__icontains='order booked')
+            Q(lead_stage__iexact='Closed-Won') |
+            Q(lead_stage__iexact='Order Booked')
         )),
     )
 
@@ -236,8 +236,8 @@ def build_insights(queryset):
         .annotate(
             total=Count('id'),
             won=Count('id', filter=(
-                Q(lead_stage__icontains='closed won') |
-                Q(lead_stage__icontains='order booked')
+                Q(lead_stage__iexact='Closed-Won') |
+                Q(lead_stage__iexact='Order Booked')
             ))
         )
         .filter(total__gte=5)  # At least 5 leads for significance
