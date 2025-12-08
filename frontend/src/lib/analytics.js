@@ -434,9 +434,9 @@ export const buildChartsVisuals = (leads = []) => {
       conversion: item.conversion,
     })),
     statusSummary: [
-      { label: 'Open', value: openCount },
       { label: 'Lost', value: Math.max(closedCount - wonCount, 0) },
       { label: 'Won', value: wonCount },
+      { label: 'Closed', value: closedCount },
     ],
     segmentStatus: segmentStatusArr,
     segmentDistribution: segmentDistributionArr,

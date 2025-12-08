@@ -99,9 +99,9 @@ def build_chart_payload(queryset):
     lost_leads = max(closed_leads - won_leads, 0)
 
     status_summary = [
-        {'label': 'Open', 'value': open_leads},
         {'label': 'Lost', 'value': lost_leads},
         {'label': 'Won', 'value': won_leads},
+        {'label': 'Closed', 'value': closed_leads},
     ]
 
     # Stage distribution

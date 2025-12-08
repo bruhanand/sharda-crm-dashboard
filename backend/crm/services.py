@@ -114,9 +114,9 @@ def build_chart_payload(queryset):
     lost_count = max(closed_count - won_count, 0)
 
     status_summary = [
-        {"label": "Open", "value": open_count},
         {"label": "Lost", "value": lost_count},
         {"label": "Won", "value": won_count},
+        {"label": "Closed", "value": closed_count},
     ]
 
     return {
