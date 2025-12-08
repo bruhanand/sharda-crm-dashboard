@@ -13,11 +13,25 @@ echo "============================================"
 echo "  Sharda CRM - Digital Ocean Deployment"
 echo "============================================"
 echo ""
+echo "🔒 SECURITY WARNING: This script contains hardcoded credentials!"
+echo "   Consider using SSH keys or environment variables for production."
+echo ""
 
-# Configuration
-read -p "Enter your Digital Ocean droplet IP address: " DROPLET_IP
-read -p "Enter your SSH username (default: root): " SSH_USER
-SSH_USER=${SSH_USER:-root}
+# Configuration - Default values (can be overridden)
+DEFAULT_DROPLET_IP="139.59.19.124"
+DEFAULT_SSH_USER="root"
+DEFAULT_SSH_PASS="Akaaand@1234AK"
+
+# Allow override via environment variables or prompts
+if [ -z "$DROPLET_IP" ]; then
+    read -p "Enter your Digital Ocean droplet IP address (default: $DEFAULT_DROPLET_IP): " DROPLET_IP
+    DROPLET_IP=${DROPLET_IP:-$DEFAULT_DROPLET_IP}
+fi
+
+if [ -z "$SSH_USER" ]; then
+    read -p "Enter your SSH username (default: $DEFAULT_SSH_USER): " SSH_USER
+    SSH_USER=${SSH_USER:-$DEFAULT_SSH_USER}
+fi
 
 if [ -z "$DROPLET_IP" ]; then
     echo "❌ IP address is required!"
@@ -26,13 +40,27 @@ fi
 
 # Check authentication method
 echo ""
-read -p "Are you using password authentication? (y/n, default: n): " USE_PASSWORD
-USE_PASSWORD=${USE_PASSWORD:-n}
+read -p "Are you using password authentication? (y/n, default: y): " USE_PASSWORD
+USE_PASSWORD=${USE_PASSWORD:-y}
 
 SSH_PASS=""
 if [[ "$USE_PASSWORD" =~ ^[Yy]$ ]]; then
-    read -sp "Enter SSH password: " SSH_PASS
-    echo ""
+    # Use default password if available, otherwise prompt
+    if [ -n "$DEFAULT_SSH_PASS" ]; then
+        read -p "Use saved password? (y/n, default: y): " USE_SAVED_PASS
+        USE_SAVED_PASS=${USE_SAVED_PASS:-y}
+        
+        if [[ "$USE_SAVED_PASS" =~ ^[Yy]$ ]]; then
+            SSH_PASS="$DEFAULT_SSH_PASS"
+            echo "✓ Using saved password"
+        else
+            read -sp "Enter SSH password: " SSH_PASS
+            echo ""
+        fi
+    else
+        read -sp "Enter SSH password: " SSH_PASS
+        echo ""
+    fi
     
     # Verify password was entered
     if [ -z "$SSH_PASS" ]; then
@@ -65,21 +93,20 @@ if [[ "$USE_PASSWORD" =~ ^[Yy]$ ]]; then
             fi
         fi
     fi
-    # Use sshpass - create a function to handle password properly
-    # Note: We'll use sshpass directly in commands rather than storing in variable
-    export SSH_PASS_SAFE="$SSH_PASS"
+    # Use SSHPASS environment variable (more reliable with special characters)
+    export SSHPASS="$SSH_PASS"
     export SSH_USER_SAFE="$SSH_USER"
     export DROPLET_IP_SAFE="$DROPLET_IP"
     
     # Function to run SSH commands with password
     ssh_with_pass() {
-        sshpass -p "$SSH_PASS_SAFE" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 "$@"
+        sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 "$@"
     }
     
-    # For heredoc usage, we'll use eval with proper escaping
-    SSH_CMD="sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10"
-    SCP_CMD="sshpass -p '$SSH_PASS' scp -o StrictHostKeyChecking=no"
-    RSYNC_SSH="sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no"
+    # For heredoc usage, use SSHPASS environment variable
+    SSH_CMD="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10"
+    SCP_CMD="sshpass -e scp -o StrictHostKeyChecking=no"
+    RSYNC_SSH="sshpass -e ssh -o StrictHostKeyChecking=no"
 else
     SSH_CMD="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10"
     SCP_CMD="scp -o StrictHostKeyChecking=no"
@@ -95,7 +122,7 @@ echo "[1/8] Testing SSH connection..."
 if [[ "$USE_PASSWORD" =~ ^[Yy]$ ]]; then
     # Test with password - use sshpass directly
     echo "  Testing connection with password authentication..."
-    CONNECTION_TEST=$(sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o BatchMode=no $SSH_USER@$DROPLET_IP 'echo Connected' 2>&1)
+    CONNECTION_TEST=$(sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o BatchMode=no $SSH_USER@$DROPLET_IP 'echo Connected' 2>&1)
     if echo "$CONNECTION_TEST" | grep -q "Connected"; then
         echo "  ✓ SSH connection successful"
     else
@@ -262,6 +289,9 @@ server {
     listen 80;
     server_name $DROPLET_IP;
     
+    # Increase upload size limit (100MB)
+    client_max_body_size 100M;
+    
     # Frontend
     location / {
         root /var/www/html;
@@ -276,6 +306,11 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        # Additional settings for large uploads
+        client_max_body_size 100M;
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 300s;
     }
     
     # Admin panel
@@ -285,6 +320,11 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        # Additional settings for large uploads
+        client_max_body_size 100M;
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 300s;
     }
     
     # Static files
@@ -292,6 +332,13 @@ server {
         alias /var/www/crm-app/backend/staticfiles/;
         expires 30d;
         add_header Cache-Control "public, immutable";
+    }
+    
+    # Media files (if needed)
+    location /media/ {
+        alias /var/www/crm-app/backend/media/;
+        expires 30d;
+        add_header Cache-Control "public";
     }
 }
 EOF
