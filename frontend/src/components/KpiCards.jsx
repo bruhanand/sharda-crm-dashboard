@@ -25,7 +25,7 @@ export default function KpiCards({ kpiData }) {
             <KpiCard
                 label="Avg Lead Age"
                 value={kpiData.avgLeadAge ? `${kpiData.avgLeadAge}` : '—'}
-                helper="Open leads"
+                helper="All leads"
             />
         </section>
     )

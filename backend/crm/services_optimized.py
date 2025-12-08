@@ -3,19 +3,16 @@ Optimized business logic for CRM analytics and reporting.
 Uses Django aggregation for performance instead of loading all records into memory.
 """
 from django.db.models import (
-    Count, Sum, Avg, Q, F, Value, CharField, 
-    IntegerField, FloatField, Case, When, Cast
+    Count, Sum, Avg, Q, F, Value, FloatField,
 )
-from django.db.models.functions import TruncMonth, Coalesce
+from django.db.models.functions import TruncMonth, Coalesce, Cast
 from django.utils import timezone
-from collections import defaultdict
-from decimal import Decimal
 
 
 def compute_kpis(queryset):
     """
     Generate KPI metrics using database aggregation.
-    
+
     Updated KPI Calculations:
     - Total leads: count of all leads
     - Open leads: count where lead_status='Open'
@@ -25,23 +22,24 @@ def compute_kpis(queryset):
     - Conversion rate: (won / total) * 100
     - Avg lead age: average of lead_age_days for ALL leads (not just open)
     - Avg close time: average close_time_days for CLOSED leads only
-    
+
     PERFORMANCE OPTIMIZATION:
     - Before: O(n) memory - loads all records
     - After: O(1) memory - database aggregation
     """
-    # Single aggregation query for all KPIs  
+    # Single aggregation query for all KPIs
     stats = queryset.aggregate(
         total_leads=Count('id'),
         open_leads=Count('id', filter=Q(lead_status='Open')),
-        # Won leads: lead_stage contains 'closed won' or 'order booked' (case-insensitive)
+        # Won leads: lead_stage contains BOTH 'closed won' AND 'order booked' (case-insensitive)
         won_leads=Count('id', filter=(
-            Q(lead_stage__icontains='closed won') | 
+            Q(lead_stage__icontains='closed won') &
             Q(lead_stage__icontains='order booked')
         )),
-        pipeline_value=Sum('order_value', filter=Q(lead_status='Open'), default=0),
+        pipeline_value=Sum('order_value', filter=Q(
+            lead_status='Open'), default=0),
         won_value=Sum('order_value', filter=(
-            Q(lead_stage__icontains='closed won') | 
+            Q(lead_stage__icontains='closed won') |
             Q(lead_stage__icontains='order booked')
         ), default=0),
         # Average close time for CLOSED leads only
@@ -49,22 +47,22 @@ def compute_kpis(queryset):
         # Average lead age for ALL leads (not just open)
         avg_lead_age_days=Avg('lead_age_days'),
     )
-    
+
     total = stats['total_leads'] or 0
     open_leads = stats['open_leads'] or 0
     won_leads = stats['won_leads'] or 0
-    
+
     # Closed leads = Total - Open
     closed_leads = total - open_leads
-    
+
     # Lost leads = Closed - Won
     lost_leads = closed_leads - won_leads
-    
+
     # Conversion rate = (won / total) * 100
     conversion_rate = (
         (won_leads / total * 100) if total > 0 else 0
     )
-    
+
     return {
         'total_leads': total,
         'open_leads': open_leads,
@@ -79,11 +77,10 @@ def compute_kpis(queryset):
     }
 
 
-
 def build_chart_payload(queryset):
     """
     Build chart data using database aggregation.
-    
+
     PERFORMANCE: Uses values + annotate instead of loading all records.
     """
     # Status distribution
@@ -94,7 +91,7 @@ def build_chart_payload(queryset):
         .values('label', 'value')
         .order_by('-value')
     )
-    
+
     # Stage distribution
     stage_summary = list(
         queryset.values('lead_stage')
@@ -103,7 +100,7 @@ def build_chart_payload(queryset):
         .values('label', 'value')
         .order_by('-value')
     )
-    
+
     # Segment distribution
     segment_distribution = list(
         queryset.values('segment')
@@ -112,7 +109,7 @@ def build_chart_payload(queryset):
         .values('label', 'value')
         .order_by('-value')
     )
-    
+
     # Dealer leaderboard
     dealer_leaderboard = list(
         queryset.values('dealer')
@@ -121,7 +118,7 @@ def build_chart_payload(queryset):
         .values('label', 'value')
         .order_by('-value')
     )
-    
+
     # KVA distribution
     kva_distribution = list(
         queryset.values('kva_range')
@@ -130,7 +127,7 @@ def build_chart_payload(queryset):
         .values('label', 'value')
         .order_by('-value')
     )
-    
+
     return {
         'status_summary': status_summary,
         'stage_summary': stage_summary,
@@ -143,21 +140,21 @@ def build_chart_payload(queryset):
 def build_insights(queryset):
     """
     Generate insights using database aggregation.
-    
+
     PERFORMANCE: Filters and counts in database instead of Python.
     """
     # High value leads count
     high_value_count = queryset.filter(
         order_value__gte=1_000_000  # Use setting value in production
     ).count()
-    
+
     # Overdue follow-ups
     today = timezone.now().date()
     overdue_count = queryset.filter(
         lead_status='Open',
         next_followup_date__lt=today
     ).count()
-    
+
     # Loss reasons (for lost leads)
     loss_reasons = list(
         queryset.filter(lead_stage__icontains='lost')
@@ -167,7 +164,7 @@ def build_insights(queryset):
         .values('label', 'value')
         .order_by('-value')
     )
-    
+
     # Fastest closing segments (segments with best avg close time)
     fastest_segments = list(
         queryset.filter(lead_status='Closed', close_time_days__isnull=False)
@@ -176,12 +173,12 @@ def build_insights(queryset):
             avg_close_time=Avg('close_time_days'),
             count=Count('id')
         )
-        .filter(count__gte=5)  # At least 5 leads for statistical significance  
+        .filter(count__gte=5)  # At least 5 leads for statistical significance
         .annotate(label=Coalesce('segment', Value('Unknown')))
         .values('label', 'avg_close_time', 'count')
         .order_by('avg_close_time')[:5]
     )
-    
+
     # Format for response
     fastest_segments_formatted = [
         {
@@ -191,14 +188,14 @@ def build_insights(queryset):
         }
         for item in fastest_segments
     ]
-    
+
     # Lead Behavior Clusters (based on engagement/followup count)
     clusters = list(
         queryset.values('followup_count')
         .annotate(count=Count('id'))
         .order_by('followup_count')
     )
-    
+
     # Group into engagement clusters
     cluster_data = []
     for item in clusters:
@@ -211,14 +208,14 @@ def build_insights(queryset):
             label = 'Medium Engagement'
         else:
             label = 'High Engagement'
-        
+
         # Find or add to cluster
         existing = next((c for c in cluster_data if c['label'] == label), None)
         if existing:
             existing['value'] += item['count']
         else:
             cluster_data.append({'label': label, 'value': item['count']})
-    
+
     # Employee Conversion (top employees by conversion rate)
     employee_conversion = list(
         queryset.exclude(owner__isnull=True)
@@ -227,19 +224,20 @@ def build_insights(queryset):
         .annotate(
             total=Count('id'),
             won=Count('id', filter=(
-                Q(lead_stage__icontains='closed won') | 
+                Q(lead_stage__icontains='closed won') |
                 Q(lead_stage__icontains='order booked')
             ))
         )
         .filter(total__gte=5)  # At least 5 leads for significance
         .annotate(
             label=F('owner'),
-            conversion_rate=Cast(F('won'), FloatField()) / Cast(F('total'), FloatField()) * 100
+            conversion_rate=Cast(F('won'), FloatField()) /
+            Cast(F('total'), FloatField()) * 100
         )
         .values('label', 'conversion_rate', 'total', 'won')
         .order_by('-conversion_rate')[:10]
     )
-    
+
     # Format employee conversion
     employee_conversion_formatted = [
         {
@@ -250,7 +248,7 @@ def build_insights(queryset):
         }
         for item in employee_conversion
     ]
-    
+
     return {
         'highValueCount': high_value_count,
         'overdueFollowups': overdue_count,
@@ -264,7 +262,7 @@ def build_insights(queryset):
 def compute_forecast(queryset):
     """
     Compute forecast data using database aggregation.
-    
+
     PERFORMANCE: Aggregates by month in database.
     """
     # Get monthly trends
@@ -279,20 +277,20 @@ def compute_forecast(queryset):
         )
         .order_by('month')
     )
-    
+
     # Calculate trends
     if len(monthly_data) >= 2:
         recent_month = monthly_data[-1]
         previous_month = monthly_data[-2]
-        
+
         lead_trend = (
-            (recent_month['lead_count'] - previous_month['lead_count']) 
+            (recent_month['lead_count'] - previous_month['lead_count'])
             / previous_month['lead_count'] * 100
             if previous_month['lead_count'] > 0 else 0
         )
     else:
         lead_trend = 0
-    
+
     # Current month stats
     current_stats = queryset.filter(
         enquiry_date__month=timezone.now().month,
@@ -301,7 +299,7 @@ def compute_forecast(queryset):
         current_month_leads=Count('id'),
         current_month_value=Sum('order_value', default=0)
     )
-    
+
     return {
         'monthly_trends': [
             {
@@ -314,5 +312,6 @@ def compute_forecast(queryset):
         ],
         'lead_trend_percentage': round(lead_trend, 1),
         'current_month_leads': current_stats['current_month_leads'] or 0,
-        'projected_month_end': current_stats['current_month_leads'] * 2,  # Simple projection
+        # Simple projection
+        'projected_month_end': current_stats['current_month_leads'] * 2,
     }

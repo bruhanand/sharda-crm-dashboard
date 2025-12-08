@@ -28,28 +28,52 @@ export const groupByField = (data, key) => {
 export const buildKpisFromDataset = (dataset = []) => {
   const numericValue = (value) => (value ? Number(value) : 0)
   const total = dataset.length
-  const open = dataset.filter((lead) => lead.lead_status === 'Open')
-  const closed = dataset.filter((lead) => lead.lead_status === 'Closed')
-  const won = dataset.filter((lead) => lead.win_flag)
-  const pipelineValue = open.reduce((sum, lead) => sum + numericValue(lead.order_value), 0)
-  const wonValue = won.reduce((sum, lead) => sum + numericValue(lead.order_value), 0)
+
+  const openLeads = dataset.filter((lead) => lead.lead_status === 'Open')
+
+  // Closed = total - open (matches backend)
+  const closedCount = total - openLeads.length
+  const closedLeads = dataset.filter((lead) => lead.lead_status === 'Closed')
+
+  // Won = lead_stage contains BOTH 'closed won' AND 'order booked' (case-insensitive)
+  const wonLeads = dataset.filter((lead) => {
+    const stage = (lead.lead_stage || '').toLowerCase()
+    return stage.includes('closed won') && stage.includes('order booked')
+  })
+
+  // Lost = closed - won
+  const lostCount = closedCount - wonLeads.length
+
+  const pipelineValue = openLeads.reduce((sum, lead) => sum + numericValue(lead.order_value), 0)
+  const wonValue = wonLeads.reduce((sum, lead) => sum + numericValue(lead.order_value), 0)
+
+  // Avg close time for closed leads only
+  const closeTimeEntries = closedLeads.filter((lead) => lead.close_time_days != null)
   const avgCloseTime =
-    closed.length > 0
+    closeTimeEntries.length > 0
       ? Math.round(
-        closed.reduce((sum, lead) => sum + (lead.close_time_days || 0), 0) / closed.length,
+        closeTimeEntries.reduce((sum, lead) => sum + (lead.close_time_days || 0), 0) /
+        closeTimeEntries.length,
       )
       : null
+
+  // Avg lead age across ALL leads
+  const ageEntries = dataset.filter((lead) => lead.lead_age_days != null)
   const avgLeadAge =
-    open.length > 0
-      ? Math.round(open.reduce((sum, lead) => sum + (lead.lead_age_days || 0), 0) / open.length)
+    ageEntries.length > 0
+      ? Math.round(
+        ageEntries.reduce((sum, lead) => sum + (lead.lead_age_days || 0), 0) /
+        ageEntries.length,
+      )
       : null
 
   return {
     total,
-    openCount: open.length,
-    closedCount: closed.length,
-    wonCount: won.length,
-    conversion: total > 0 ? ((won.length / total) * 100).toFixed(1) : '0.0',
+    openCount: openLeads.length,
+    closedCount,
+    wonCount: wonLeads.length,
+    lostCount,
+    conversion: total > 0 ? ((wonLeads.length / total) * 100).toFixed(1) : '0.0',
     pipelineValue,
     wonValue,
     avgCloseTime,

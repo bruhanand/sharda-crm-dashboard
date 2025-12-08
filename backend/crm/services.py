@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from dataclasses import dataclass
 from decimal import Decimal
 from typing import Iterable
 
@@ -28,7 +27,7 @@ def _group_counts(leads: list[Lead], attr: str) -> list[dict]:
 def compute_kpis(queryset):
     """
     Generate KPI metrics from queryset.
-    
+
     Updated KPI Calculations:
     - Total leads: count of all leads
     - Open leads: count where lead_status='Open'
@@ -42,15 +41,15 @@ def compute_kpis(queryset):
     leads = _as_list(queryset)
     total = len(leads)
     open_leads_list = [lead for lead in leads if lead.lead_status == "Open"]
-    closed_leads_list = [lead for lead in leads if lead.lead_status == "Closed"]
-    
-    # Won leads: lead_stage contains 'closed won' or 'order booked' (case-insensitive)
+    closed_leads_list = [
+        lead for lead in leads if lead.lead_status == "Closed"]
+
+    # Won leads: lead_stage contains BOTH 'closed won' AND 'order booked' (case-insensitive)
     won_leads_list = [
-        lead for lead in leads 
-        if lead.lead_stage and (
-            'closed won' in lead.lead_stage.lower() or 
-            'order booked' in lead.lead_stage.lower()
-        )
+        lead for lead in leads
+        if lead.lead_stage
+        and 'closed won' in lead.lead_stage.lower()
+        and 'order booked' in lead.lead_stage.lower()
     ]
 
     def _sum(values):
@@ -62,21 +61,22 @@ def compute_kpis(queryset):
 
     pipeline_value = _sum(open_leads_list)
     won_value = _sum(won_leads_list)
-    
+
     # Closed leads = Total - Open
     closed_count = total - len(open_leads_list)
-    
+
     # Lost leads = Closed - Won
     lost_count = closed_count - len(won_leads_list)
 
     # Average close time for CLOSED leads only
     leads_with_close_time = [l for l in closed_leads_list if l.close_time_days]
     avg_close = (
-        round(sum(l.close_time_days for l in leads_with_close_time) / len(leads_with_close_time))
+        round(sum(l.close_time_days for l in leads_with_close_time) /
+              len(leads_with_close_time))
         if leads_with_close_time
         else None
     )
-    
+
     # Average lead age for ALL leads (not just open)
     leads_with_age = [l for l in leads if l.lead_age_days]
     avg_age = (
@@ -97,7 +97,6 @@ def compute_kpis(queryset):
         "avg_close_days": avg_close,
         "avg_lead_age_days": avg_age,
     }
-
 
 
 def build_chart_payload(queryset):
@@ -164,8 +163,9 @@ def build_forecast(queryset):
             buckets[label]["wins"] += 1
     forecast_rows = []
     for label, stats in buckets.items():
-        conv = round((stats["wins"] / stats["leads"]) * 100, 1) if stats["leads"] else 0
-        forecast_rows.append({"label": label, "leads": stats["leads"], "conversion_pct": conv})
+        conv = round((stats["wins"] / stats["leads"])
+                     * 100, 1) if stats["leads"] else 0
+        forecast_rows.append(
+            {"label": label, "leads": stats["leads"], "conversion_pct": conv})
     forecast_rows.sort(key=lambda item: item["label"])
     return forecast_rows
-
