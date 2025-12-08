@@ -83,14 +83,26 @@ def build_chart_payload(queryset):
 
     PERFORMANCE: Uses values + annotate instead of loading all records.
     """
-    # Status distribution
-    status_summary = list(
-        queryset.values('lead_status')
-        .annotate(value=Count('id'))
-        .annotate(label=Coalesce('lead_status', Value('N/A')))
-        .values('label', 'value')
-        .order_by('-value')
+    stats = queryset.aggregate(
+        total_leads=Count('id'),
+        open_leads=Count('id', filter=Q(lead_status='Open')),
+        won_leads=Count('id', filter=(
+            Q(lead_stage__icontains='closed won') &
+            Q(lead_stage__icontains='order booked')
+        )),
     )
+
+    total = stats['total_leads'] or 0
+    open_leads = stats['open_leads'] or 0
+    won_leads = stats['won_leads'] or 0
+    closed_leads = total - open_leads
+    lost_leads = max(closed_leads - won_leads, 0)
+
+    status_summary = [
+        {'label': 'Open', 'value': open_leads},
+        {'label': 'Lost', 'value': lost_leads},
+        {'label': 'Won', 'value': won_leads},
+    ]
 
     # Stage distribution
     stage_summary = list(

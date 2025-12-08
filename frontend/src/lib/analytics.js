@@ -350,7 +350,11 @@ export const buildChartsVisuals = (leads = []) => {
     const segment = lead.segment || 'Unspecified'
     segmentDistribution[segment] = (segmentDistribution[segment] || 0) + 1
 
-    const isWon = Boolean(lead.win_flag)
+    const stage = (lead.lead_stage || '').toLowerCase()
+    const isWon =
+      (stage.includes('closed won') && stage.includes('order booked')) ||
+      Boolean(lead.win_flag)
+
     if (lead.lead_status === 'Open') {
       openCount += 1
     } else {
@@ -430,7 +434,7 @@ export const buildChartsVisuals = (leads = []) => {
     })),
     statusSummary: [
       { label: 'Open', value: openCount },
-      { label: 'Closed', value: closedCount },
+      { label: 'Lost', value: Math.max(closedCount - wonCount, 0) },
       { label: 'Won', value: wonCount },
     ],
     segmentStatus: segmentStatusArr,

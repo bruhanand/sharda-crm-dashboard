@@ -101,8 +101,28 @@ def compute_kpis(queryset):
 
 def build_chart_payload(queryset):
     leads = _as_list(queryset)
+
+    open_count = len([lead for lead in leads if lead.lead_status == "Open"])
+    total = len(leads)
+
+    won_count = len([
+        lead for lead in leads
+        if lead.lead_stage
+        and "closed won" in lead.lead_stage.lower()
+        and "order booked" in lead.lead_stage.lower()
+    ])
+
+    closed_count = total - open_count
+    lost_count = max(closed_count - won_count, 0)
+
+    status_summary = [
+        {"label": "Open", "value": open_count},
+        {"label": "Lost", "value": lost_count},
+        {"label": "Won", "value": won_count},
+    ]
+
     return {
-        "status_summary": _group_counts(leads, "lead_status"),
+        "status_summary": status_summary,
         "stage_summary": _group_counts(leads, "lead_stage"),
         "segment_distribution": _group_counts(leads, "segment"),
         "dealer_leaderboard": _group_counts(leads, "dealer"),
