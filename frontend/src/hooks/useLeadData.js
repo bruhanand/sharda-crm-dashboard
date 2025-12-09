@@ -21,6 +21,7 @@ export const useLeadData = (filters, refreshKey, isAuthenticated, isAdmin = fals
     )
     const [insightData, setInsightData] = useState(() => buildInsightsFromDataset(fallbackLeads))
     const [forecastData, setForecastData] = useState(null)  // Admin-only forecast data
+    const [chartData, setChartData] = useState(null)  // Chart data from backend
     const [isLoading, setIsLoading] = useState(false)
     const [apiError, setApiError] = useState(null)
 
@@ -40,6 +41,7 @@ export const useLeadData = (filters, refreshKey, isAuthenticated, isAdmin = fals
                 const baseRequests = [
                     apiRequest('leads/', { params, signal: controller.signal }),
                     apiRequest('kpis/', { params: aggregateParams, signal: controller.signal }),
+                    apiRequest('charts/', { params: aggregateParams, signal: controller.signal }),
                 ]
 
                 // Admin users get forecast data
@@ -51,11 +53,11 @@ export const useLeadData = (filters, refreshKey, isAuthenticated, isAdmin = fals
 
                 const responses = await Promise.all(baseRequests)
 
-                let leadResponse, kpiResponse, forecastResponse
+                let leadResponse, kpiResponse, chartResponse, forecastResponse
                 if (isAdmin) {
-                    [leadResponse, kpiResponse, forecastResponse] = responses
+                    [leadResponse, kpiResponse, chartResponse, forecastResponse] = responses
                 } else {
-                    [leadResponse, kpiResponse] = responses
+                    [leadResponse, kpiResponse, chartResponse] = responses
                 }
 
                 const serverLeads = leadResponse.results ?? leadResponse
@@ -66,6 +68,9 @@ export const useLeadData = (filters, refreshKey, isAuthenticated, isAdmin = fals
                 // Format KPI data from backend response
                 const formattedKpis = formatKpisResponse(kpiResponse)
                 setKpiData(formattedKpis)
+                
+                // Set chart data from backend (matches frontend structure)
+                setChartData(chartResponse)
                 
                 // Build insights from client-side using actual leads data
                 setInsightData(buildInsightsFromDataset(leadsArray))
@@ -89,6 +94,8 @@ export const useLeadData = (filters, refreshKey, isAuthenticated, isAdmin = fals
                 setInsightData((current) =>
                     current && current.clusters?.length ? current : buildInsightsFromDataset(fallbackLeads),
                 )
+                // Reset chart data on error (will fallback to client-side building)
+                setChartData(null)
             } finally {
                 setIsLoading(false)
             }
@@ -105,6 +112,7 @@ export const useLeadData = (filters, refreshKey, isAuthenticated, isAdmin = fals
         forecastSummary,
         insightData,
         forecastData,
+        chartData,
         isLoading,
         apiError,
     }

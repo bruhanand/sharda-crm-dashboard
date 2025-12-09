@@ -99,32 +99,171 @@ def compute_kpis(queryset):
 
 
 def build_chart_payload(queryset):
+    """
+    Build chart data matching frontend's expected structure.
+    
+    Returns structure compatible with ChartsView component:
+    - monthlyLeads: Monthly lead volume with conversion rates
+    - conversionTrend: Conversion rate trend over time
+    - statusSummary: Open/Won/Lost counts
+    - segmentDistribution: Leads grouped by segment
+    - segmentStatus: Open vs Closed counts per segment
+    - segmentCloseDays: Average close days per segment
+    - avgCloseDays: Overall average close days
+    """
+    from collections import defaultdict
+    from datetime import datetime
+    
     leads = _as_list(queryset)
-
-    open_count = len([lead for lead in leads if lead.lead_status == "Open"])
-    total = len(leads)
-
-    won_count = len([
-        lead for lead in leads
-        if lead.lead_stage
-        and (lead.lead_stage.strip().lower() == 'closed-won' or lead.lead_stage.strip().lower() == 'order booked')
-    ])
-
-    closed_count = total - open_count
-    lost_count = max(closed_count - won_count, 0)
-
-    status_summary = [
-        {"label": "Lost", "value": lost_count},
-        {"label": "Won", "value": won_count},
-        {"label": "Closed", "value": closed_count},
+    
+    # Helper to normalize stage for won determination
+    def is_won(lead):
+        if not lead.lead_stage:
+            return False
+        stage_lower = lead.lead_stage.strip().lower()
+        return stage_lower == 'closed-won' or stage_lower == 'order booked'
+    
+    # Helper to normalize status
+    def normalize_status(lead):
+        status = (lead.lead_status or '').strip().lower()
+        return 'open' if status == 'open' else 'closed'
+    
+    # Monthly leads aggregation
+    monthly_map = defaultdict(lambda: {'leads': 0, 'won': 0})
+    
+    # Status counts
+    open_count = 0
+    won_count = 0
+    lost_count = 0
+    
+    # Segment aggregations
+    segment_distribution = defaultdict(int)
+    segment_status = defaultdict(lambda: {'open': 0, 'closed': 0})
+    segment_close_days = defaultdict(lambda: {'total': 0, 'count': 0})
+    
+    # Overall close days tracking
+    total_close_days = 0
+    close_days_count = 0
+    
+    for lead in leads:
+        # Monthly grouping
+        if lead.enquiry_date:
+            try:
+                # Parse date and create month key
+                if isinstance(lead.enquiry_date, str):
+                    date_obj = datetime.strptime(lead.enquiry_date.split('T')[0], '%Y-%m-%d')
+                else:
+                    date_obj = lead.enquiry_date
+                
+                month_key = f"{date_obj.year}-{date_obj.month:02d}"
+                month_label = date_obj.strftime('%b %Y')  # e.g., "Jan 2024"
+                
+                monthly_map[month_key]['leads'] += 1
+                monthly_map[month_key]['label'] = month_label
+                if is_won(lead):
+                    monthly_map[month_key]['won'] += 1
+            except (ValueError, AttributeError):
+                pass
+        
+        # Status counts
+        status_norm = normalize_status(lead)
+        is_won_lead = is_won(lead)
+        
+        if status_norm == 'open':
+            open_count += 1
+        else:
+            if is_won_lead:
+                won_count += 1
+            else:
+                lost_count += 1
+        
+        # Segment distribution
+        segment = lead.segment or 'Unspecified'
+        segment_distribution[segment] += 1
+        
+        # Segment status (open vs closed)
+        if status_norm == 'open':
+            segment_status[segment]['open'] += 1
+        else:
+            segment_status[segment]['closed'] += 1
+        
+        # Segment close days
+        if lead.close_time_days is not None:
+            segment_close_days[segment]['total'] += lead.close_time_days
+            segment_close_days[segment]['count'] += 1
+            total_close_days += lead.close_time_days
+            close_days_count += 1
+    
+    # Build monthlyLeads array
+    monthly_leads = []
+    for month_key in sorted(monthly_map.keys()):
+        entry = monthly_map[month_key]
+        leads_count = entry['leads']
+        won_count_month = entry['won']
+        conversion = round((won_count_month / leads_count * 100), 1) if leads_count > 0 else 0
+        
+        monthly_leads.append({
+            'label': entry['label'],
+            'leads': leads_count,
+            'conversion': conversion
+        })
+    
+    # Build conversionTrend (same as monthlyLeads but only conversion)
+    conversion_trend = [
+        {'label': item['label'], 'conversion': item['conversion']}
+        for item in monthly_leads
     ]
-
+    
+    # Build statusSummary (Open, Won, Lost)
+    status_summary = [
+        {'label': 'Open', 'value': open_count},
+        {'label': 'Won', 'value': won_count},
+        {'label': 'Lost', 'value': lost_count}
+    ]
+    
+    # Build segmentDistribution
+    segment_distribution_arr = [
+        {'segment': segment, 'value': count}
+        for segment, count in sorted(segment_distribution.items(), key=lambda x: x[1], reverse=True)
+    ]
+    
+    # Build segmentStatus
+    segment_status_arr = [
+        {
+            'segment': segment,
+            'open': stats['open'],
+            'closed': stats['closed']
+        }
+        for segment, stats in sorted(
+            segment_status.items(),
+            key=lambda x: x[1]['open'] + x[1]['closed'],
+            reverse=True
+        )
+    ]
+    
+    # Build segmentCloseDays
+    segment_close_days_arr = []
+    for segment, stats in segment_close_days.items():
+        if stats['count'] > 0:
+            segment_close_days_arr.append({
+                'segment': segment,
+                'avgCloseDays': round(stats['total'] / stats['count'])
+            })
+    
+    # Sort by avgCloseDays descending
+    segment_close_days_arr.sort(key=lambda x: x['avgCloseDays'], reverse=True)
+    
+    # Calculate overall average close days
+    avg_close_days = round(total_close_days / close_days_count) if close_days_count > 0 else None
+    
     return {
-        "status_summary": status_summary,
-        "stage_summary": _group_counts(leads, "lead_stage"),
-        "segment_distribution": _group_counts(leads, "segment"),
-        "dealer_leaderboard": _group_counts(leads, "dealer"),
-        "kva_distribution": _group_counts(leads, "kva_range"),
+        'monthlyLeads': monthly_leads,
+        'conversionTrend': conversion_trend,
+        'statusSummary': status_summary,
+        'segmentDistribution': segment_distribution_arr,
+        'segmentStatus': segment_status_arr,
+        'segmentCloseDays': segment_close_days_arr,
+        'avgCloseDays': avg_close_days
     }
 
 

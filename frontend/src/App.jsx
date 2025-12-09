@@ -435,6 +435,7 @@ function App() {
           <Dashboard
             activeTab={activeTab}
             filters={filters}
+            setFilters={setFilters}
             leads={leads}
             kpiData={kpiData}
             forecastSummary={forecastSummary}

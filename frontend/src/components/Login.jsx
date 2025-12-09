@@ -8,9 +8,27 @@ const Login = ({ onLogin }) => {
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
 
+    // Check if localStorage is available (Safari private browsing blocks it)
+    const isLocalStorageAvailable = () => {
+        try {
+            const test = '__localStorage_test__'
+            localStorage.setItem(test, test)
+            localStorage.removeItem(test)
+            return true
+        } catch (e) {
+            return false
+        }
+    }
+
     const handleSubmit = async (e) => {
         e.preventDefault()
         setError('')
+
+        // Check localStorage availability (Safari private browsing issue)
+        if (!isLocalStorageAvailable()) {
+            setError('LocalStorage is not available. Please disable Private Browsing mode in Safari or use a different browser.')
+            return
+        }
 
         const payload = {
             username: username.trim(),
@@ -36,20 +54,28 @@ const Login = ({ onLogin }) => {
 
             console.log('Login response:', data)
 
-            if (data.token) {
-                localStorage.setItem('authToken', data.token)
-                const userData = {
-                    id: data.user_id,
-                    username: data.username,
-                    email: data.email,
-                    is_admin: data.is_admin || false
+            if (data && data.token) {
+                try {
+                    localStorage.setItem('authToken', data.token)
+                    const userData = {
+                        id: data.user_id,
+                        username: data.username,
+                        email: data.email,
+                        is_admin: data.is_admin || false,
+                        is_staff: data.is_staff || false
+                    }
+                    localStorage.setItem('user', JSON.stringify(userData))
+                    console.log('Login successful, token and user data saved')
+                    onLogin(data.token)
+                } catch (storageError) {
+                    console.error('Failed to save to localStorage:', storageError)
+                    setError('Login successful but failed to save session. Please check Safari settings or disable Private Browsing.')
+                    setLoading(false)
+                    return
                 }
-                localStorage.setItem('user', JSON.stringify(userData))
-                console.log('Login successful, token and user data saved')
-                onLogin(data.token)
             } else {
                 console.error('No token in response:', data)
-                setError('Login failed: No token received')
+                setError('Login failed: No token received from server. Please check your credentials and try again.')
             }
         } catch (err) {
             console.error('Login error:', err)
@@ -58,11 +84,24 @@ const Login = ({ onLogin }) => {
             let errorMessage = 'Invalid username or password'
 
             if (err.message) {
-                // Check if it's the Django error format with non_field_errors
-                if (err.message.includes('non_field_errors') || err.message.includes('Unable to log in')) {
+                // Check for network/CORS errors (common in Safari)
+                if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('CORS')) {
+                    errorMessage = 'Network error: Unable to connect to server. Please check your internet connection and CORS settings.'
+                } else if (err.message.includes('non_field_errors') || err.message.includes('Unable to log in')) {
                     errorMessage = 'Invalid username or password'
+                } else if (err.status === 401 || err.status === 403) {
+                    errorMessage = 'Invalid username or password'
+                } else if (err.status === 500) {
+                    errorMessage = 'Server error: Please try again later or contact support.'
                 } else if (typeof err.message === 'string') {
                     errorMessage = err.message
+                }
+            }
+
+            // Safari-specific error hints
+            if (navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chrome')) {
+                if (errorMessage.includes('Network error') || errorMessage.includes('CORS')) {
+                    errorMessage += ' (Safari Tip: Check if cookies are enabled and CORS is properly configured on the server)'
                 }
             }
 
@@ -111,9 +150,17 @@ const Login = ({ onLogin }) => {
                         padding: '0.75rem',
                         borderRadius: '0.5rem',
                         marginBottom: '1rem',
-                        fontSize: '0.9rem'
+                        fontSize: '0.9rem',
+                        lineHeight: '1.5',
+                        wordWrap: 'break-word',
+                        maxWidth: '100%'
                     }}>
                         {error}
+                        {error.includes('LocalStorage') && (
+                            <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', opacity: 0.9 }}>
+                                <strong>Safari Fix:</strong> Go to Safari → Preferences → Privacy → Uncheck "Prevent cross-site tracking" or disable Private Browsing
+                            </div>
+                        )}
                     </div>
                 )}
 

@@ -79,10 +79,24 @@ def compute_kpis(queryset):
 
 def build_chart_payload(queryset):
     """
-    Build chart data using database aggregation.
-
-    PERFORMANCE: Uses values + annotate instead of loading all records.
+    Build chart data matching frontend's expected structure.
+    
+    Returns structure compatible with ChartsView component:
+    - monthlyLeads: Monthly lead volume with conversion rates
+    - conversionTrend: Conversion rate trend over time
+    - statusSummary: Open/Won/Lost counts
+    - segmentDistribution: Leads grouped by segment
+    - segmentStatus: Open vs Closed counts per segment
+    - segmentCloseDays: Average close days per segment
+    - avgCloseDays: Overall average close days
+    
+    PERFORMANCE: Uses database aggregation where possible, but needs to iterate
+    for monthly grouping and conversion calculations.
     """
+    from collections import defaultdict
+    from datetime import datetime
+    
+    # Get status counts using aggregation
     stats = queryset.aggregate(
         total_leads=Count('id'),
         open_leads=Count('id', filter=Q(lead_status='Open')),
@@ -98,54 +112,130 @@ def build_chart_payload(queryset):
     closed_leads = total - open_leads
     lost_leads = max(closed_leads - won_leads, 0)
 
+    # Status summary (matching frontend format)
     status_summary = [
-        {'label': 'Lost', 'value': lost_leads},
+        {'label': 'Open', 'value': open_leads},
         {'label': 'Won', 'value': won_leads},
-        {'label': 'Closed', 'value': closed_leads},
+        {'label': 'Lost', 'value': lost_leads},
     ]
 
-    # Stage distribution
-    stage_summary = list(
-        queryset.values('lead_stage')
-        .annotate(value=Count('id'))
-        .annotate(label=Coalesce('lead_stage', Value('N/A')))
-        .values('label', 'value')
-        .order_by('-value')
-    )
+    # Monthly leads - need to iterate for date formatting
+    monthly_map = defaultdict(lambda: {'leads': 0, 'won': 0})
+    
+    # Get leads with enquiry_date for monthly grouping
+    leads_with_dates = queryset.exclude(enquiry_date__isnull=True).values('enquiry_date', 'lead_stage')
+    
+    for lead in leads_with_dates:
+        if lead['enquiry_date']:
+            try:
+                date_obj = lead['enquiry_date']
+                if isinstance(date_obj, str):
+                    date_obj = datetime.strptime(date_obj.split('T')[0], '%Y-%m-%d')
+                
+                month_key = f"{date_obj.year}-{date_obj.month:02d}"
+                month_label = date_obj.strftime('%b %Y')
+                
+                monthly_map[month_key]['leads'] += 1
+                monthly_map[month_key]['label'] = month_label
+                
+                # Check if won
+                stage = (lead.get('lead_stage') or '').strip().lower()
+                if stage == 'closed-won' or stage == 'order booked':
+                    monthly_map[month_key]['won'] += 1
+            except (ValueError, AttributeError, TypeError):
+                pass
+    
+    # Build monthlyLeads array
+    monthly_leads = []
+    for month_key in sorted(monthly_map.keys()):
+        entry = monthly_map[month_key]
+        leads_count = entry['leads']
+        won_count_month = entry['won']
+        conversion = round((won_count_month / leads_count * 100), 1) if leads_count > 0 else 0
+        
+        monthly_leads.append({
+            'label': entry['label'],
+            'leads': leads_count,
+            'conversion': conversion
+        })
+    
+    # Build conversionTrend (same as monthlyLeads but only conversion)
+    conversion_trend = [
+        {'label': item['label'], 'conversion': item['conversion']}
+        for item in monthly_leads
+    ]
 
-    # Segment distribution
-    segment_distribution = list(
+    # Segment distribution using aggregation
+    segment_distribution_raw = list(
         queryset.values('segment')
         .annotate(value=Count('id'))
-        .annotate(label=Coalesce('segment', Value('N/A')))
+        .annotate(label=Coalesce('segment', Value('Unspecified')))
         .values('label', 'value')
         .order_by('-value')
     )
+    
+    segment_distribution = [
+        {'segment': item['label'], 'value': item['value']}
+        for item in segment_distribution_raw
+    ]
 
-    # Dealer leaderboard
-    dealer_leaderboard = list(
-        queryset.values('dealer')
-        .annotate(value=Count('id'))
-        .annotate(label=Coalesce('dealer', Value('N/A')))
-        .values('label', 'value')
-        .order_by('-value')
+    # Segment status (open vs closed) using aggregation
+    segment_status_raw = list(
+        queryset.values('segment')
+        .annotate(
+            open=Count('id', filter=Q(lead_status='Open')),
+            closed=Count('id', filter=~Q(lead_status='Open'))
+        )
+        .annotate(label=Coalesce('segment', Value('Unspecified')))
+        .values('label', 'open', 'closed')
+        .order_by('-open', '-closed')
     )
+    
+    segment_status = [
+        {
+            'segment': item['label'],
+            'open': item['open'],
+            'closed': item['closed']
+        }
+        for item in segment_status_raw
+    ]
 
-    # KVA distribution
-    kva_distribution = list(
-        queryset.values('kva_range')
-        .annotate(value=Count('id'))
-        .annotate(label=Coalesce('kva_range', Value('N/A')))
-        .values('label', 'value')
-        .order_by('-value')
+    # Segment close days using aggregation
+    segment_close_days_raw = list(
+        queryset.exclude(close_time_days__isnull=True)
+        .values('segment')
+        .annotate(
+            avg_close_days=Avg('close_time_days'),
+            count=Count('id')
+        )
+        .annotate(label=Coalesce('segment', Value('Unspecified')))
+        .filter(count__gt=0)
+        .values('label', 'avg_close_days')
+        .order_by('-avg_close_days')
     )
+    
+    segment_close_days = [
+        {
+            'segment': item['label'],
+            'avgCloseDays': round(item['avg_close_days'])
+        }
+        for item in segment_close_days_raw
+    ]
+
+    # Overall average close days
+    avg_close_stats = queryset.exclude(close_time_days__isnull=True).aggregate(
+        avg_close_days=Avg('close_time_days')
+    )
+    avg_close_days = round(avg_close_stats['avg_close_days']) if avg_close_stats['avg_close_days'] else None
 
     return {
-        'status_summary': status_summary,
-        'stage_summary': stage_summary,
-        'segment_distribution': segment_distribution,
-        'dealer_leaderboard': dealer_leaderboard,
-        'kva_distribution': kva_distribution,
+        'monthlyLeads': monthly_leads,
+        'conversionTrend': conversion_trend,
+        'statusSummary': status_summary,
+        'segmentDistribution': segment_distribution,
+        'segmentStatus': segment_status,
+        'segmentCloseDays': segment_close_days,
+        'avgCloseDays': avg_close_days
     }
 
 

@@ -24,6 +24,7 @@ from .forecast_service import (
     forecast_by_location,
     forecast_by_kva_range
 )
+from .hierarchical_forecast_service import generate_complete_forecast
 
 # File upload configuration
 MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
@@ -705,34 +706,77 @@ class HealthCheckView(APIView):
 
 class ForecastView(APIView):
     """
-    Forecast Analytics - Admin Only
-    Provides predictive analytics for leads, conversion, and sales forecasting
+    Hierarchical Forecast Analytics - Auto-Generated Complete Forecast Engine
+    Generates State → Dealer → Location forecasts plus Range & Sector forecasts
+    Admin Only endpoint
     """
     permission_classes = [permissions.IsAdminUser]
     
     @method_decorator(ratelimit(key='ip', rate='30/m', method='GET'))
     def get(self, request):
-        """Generate forecast data based on historical trends"""
+        """Generate complete hierarchical forecast based on selected horizon"""
         try:
-            # Use ALL data for ML forecasting (ignore filters for better predictions)
-            queryset = Lead.objects.all()
+            # Get queryset with optional filters
+            queryset = filter_queryset(request)
             
-            # Get forecast parameters from query params
-            lead_months = int(request.GET.get('lead_months', 6))
-            conversion_months = int(request.GET.get('conversion_months', 6))
-            dealer_months = int(request.GET.get('dealer_months', 3))
-            kva_months = int(request.GET.get('kva_months', 6))
+            # Handle comma-separated state and dealer filters from frontend
+            state_filter = request.GET.get('state', '')
+            if state_filter:
+                states = [s.strip() for s in state_filter.split(',') if s.strip()]
+                if states:
+                    queryset = queryset.filter(state__in=states)
             
-            # Calculate all forecasts
-            forecast_data = {
-                'leads_over_time': calculate_lead_forecast(queryset, lead_months),
-                'conversion_forecast': calculate_conversion_forecast(queryset, conversion_months),
-                'by_dealer': forecast_by_dealer(queryset, dealer_months),
-                'by_location': forecast_by_location(queryset),
-                'by_kva_range': forecast_by_kva_range(queryset, kva_months),
-            }
+            dealer_filter = request.GET.get('dealer', '')
+            if dealer_filter:
+                dealers = [d.strip() for d in dealer_filter.split(',') if d.strip()]
+                if dealers:
+                    queryset = queryset.filter(dealer__in=dealers)
             
-            return Response(forecast_data, status=status.HTTP_200_OK)
+            # Handle date range filters (start_date and end_date are handled by filter_queryset)
+            # But we also support start_date and end_date directly for historical data limitation
+            start_date = request.GET.get('start_date')
+            end_date = request.GET.get('end_date')
+            if start_date:
+                queryset = queryset.filter(enquiry_date__gte=start_date)
+            if end_date:
+                queryset = queryset.filter(enquiry_date__lte=end_date)
+            
+            # Get forecast horizon (3M, 6M, 12M) - convert to weeks
+            horizon = request.GET.get('horizon', '6M').upper()
+            horizon_map = {'3M': 12, '6M': 24, '12M': 52, '1Y': 52}
+            horizon_weeks = horizon_map.get(horizon, 24)  # Default to 6 months
+            
+            # Get metric selection (enquiries, order_value, both)
+            metric = request.GET.get('metric', 'both')
+            if metric not in ['enquiries', 'order_value', 'both']:
+                metric = 'both'
+            
+            # Check if using new hierarchical forecast (default) or legacy
+            use_hierarchical = request.GET.get('use_hierarchical', 'true').lower() == 'true'
+            
+            if use_hierarchical:
+                # Generate complete hierarchical forecast
+                forecast_data = generate_complete_forecast(
+                    queryset=queryset,
+                    horizon_weeks=horizon_weeks,
+                    metric=metric
+                )
+                
+                # Add horizon in readable format
+                forecast_data['horizon'] = horizon
+                
+                return Response(forecast_data, status=status.HTTP_200_OK)
+            else:
+                # Legacy forecast format (for backward compatibility)
+                lead_months = horizon_weeks // 4  # Approximate months
+                forecast_data = {
+                    'leads_over_time': calculate_lead_forecast(queryset, lead_months),
+                    'conversion_forecast': calculate_conversion_forecast(queryset, lead_months),
+                    'by_dealer': forecast_by_dealer(queryset, min(lead_months, 3)),
+                    'by_location': forecast_by_location(queryset),
+                    'by_kva_range': forecast_by_kva_range(queryset, lead_months),
+                }
+                return Response(forecast_data, status=status.HTTP_200_OK)
             
         except ValueError as e:
             return Response(
@@ -740,7 +784,8 @@ class ForecastView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
+            import traceback
             return Response(
-                {'error': 'Forecast calculation failed', 'detail': str(e)},
+                {'error': 'Forecast calculation failed', 'detail': str(e), 'traceback': traceback.format_exc()},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

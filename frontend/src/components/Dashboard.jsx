@@ -16,6 +16,7 @@ import { buildChartsVisuals, buildTopEntities } from '../lib/analytics'
 const Dashboard = ({
     activeTab,
     filters,
+    setFilters,
     leads,
     kpiData,
     forecastSummary,
@@ -98,7 +99,7 @@ const Dashboard = ({
                 )
 
             case 'Forecast':
-                return <ForecastView forecastData={forecastData} />
+                return <ForecastView forecastData={forecastData} filters={filters} setFilters={setFilters} />
 
             case 'Update Leads':
                 return (

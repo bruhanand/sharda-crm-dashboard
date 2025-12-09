@@ -5,22 +5,140 @@ from django.db import migrations, models
 
 def migrate_leads_uploaded_on_to_source(apps, schema_editor):
     """Migrate data from leads_uploaded_on to source field"""
+    from django.db import connection
+    
     Lead = apps.get_model('crm', 'Lead')
-    for lead in Lead.objects.exclude(leads_uploaded_on__isnull=True).exclude(leads_uploaded_on=''):
-        # Extract filename from "filename|timestamp" format
-        upload_value = lead.leads_uploaded_on
-        if '|' in upload_value:
-            filename = upload_value.split('|')[0]
-            lead.source = filename
-        else:
-            lead.source = upload_value
-        lead.save(update_fields=['source'])
+    db_table = 'crm_lead'
+    field_exists = False
+    
+    # Check if field exists in database
+    with connection.cursor() as cursor:
+        if connection.vendor == 'sqlite':
+            cursor.execute(f"PRAGMA table_info({db_table})")
+            columns = [row[1] for row in cursor.fetchall()]
+            field_exists = 'leads_uploaded_on' in columns
+        elif connection.vendor == 'postgresql':
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = %s AND column_name = 'leads_uploaded_on'
+            """, [db_table])
+            field_exists = cursor.fetchone() is not None
+        elif connection.vendor == 'mysql':
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = DATABASE() 
+                AND table_name = %s AND column_name = 'leads_uploaded_on'
+            """, [db_table])
+            field_exists = cursor.fetchone() is not None
+    
+    # Only migrate if field exists
+    if field_exists:
+        try:
+            # Use raw SQL to access the field since it might not be in model state
+            with connection.cursor() as cursor:
+                cursor.execute(f"SELECT id, leads_uploaded_on FROM {db_table} WHERE leads_uploaded_on IS NOT NULL AND leads_uploaded_on != ''")
+                rows = cursor.fetchall()
+                
+                for lead_id, upload_value in rows:
+                    # Extract filename from "filename|timestamp" format
+                    if '|' in upload_value:
+                        filename = upload_value.split('|')[0]
+                    else:
+                        filename = upload_value
+                    
+                    # Update source field
+                    cursor.execute(
+                        f"UPDATE {db_table} SET source = %s WHERE id = %s",
+                        [filename, lead_id]
+                    )
+        except Exception:
+            # If raw SQL fails, try using model (might work if field is in model state)
+            try:
+                for lead in Lead.objects.raw(f"SELECT * FROM {db_table} WHERE leads_uploaded_on IS NOT NULL AND leads_uploaded_on != ''"):
+                    upload_value = getattr(lead, 'leads_uploaded_on', None)
+                    if upload_value:
+                        if '|' in upload_value:
+                            filename = upload_value.split('|')[0]
+                        else:
+                            filename = upload_value
+                        lead.source = filename
+                        lead.save(update_fields=['source'])
+            except Exception:
+                pass
+
+
+def remove_leads_uploaded_on_field_and_index(apps, schema_editor):
+    """Remove leads_uploaded_on field and index if they exist"""
+    from django.db import connection
+    
+    db_table = 'crm_lead'
+    field_exists = False
+    
+    # Check if field exists in database
+    with connection.cursor() as cursor:
+        if connection.vendor == 'sqlite':
+            cursor.execute(f"PRAGMA table_info({db_table})")
+            columns = [row[1] for row in cursor.fetchall()]
+            field_exists = 'leads_uploaded_on' in columns
+            
+            # Remove index if it exists
+            if field_exists:
+                try:
+                    cursor.execute("DROP INDEX IF EXISTS crm_lead_leads_u_4b92b3_idx")
+                except Exception:
+                    pass
+                
+                # For SQLite 3.35.0+, DROP COLUMN is supported
+                # For older versions, this will fail but that's okay since field might not exist
+                try:
+                    cursor.execute(f"ALTER TABLE {db_table} DROP COLUMN leads_uploaded_on")
+                except Exception:
+                    # Field might not exist or SQLite version doesn't support DROP COLUMN
+                    pass
+        elif connection.vendor == 'postgresql':
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = %s AND column_name = 'leads_uploaded_on'
+            """, [db_table])
+            field_exists = cursor.fetchone() is not None
+            if field_exists:
+                try:
+                    cursor.execute("DROP INDEX IF EXISTS crm_lead_leads_u_4b92b3_idx")
+                    cursor.execute(f"ALTER TABLE {db_table} DROP COLUMN leads_uploaded_on")
+                except Exception:
+                    pass
+        elif connection.vendor == 'mysql':
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = DATABASE() 
+                AND table_name = %s AND column_name = 'leads_uploaded_on'
+            """, [db_table])
+            field_exists = cursor.fetchone() is not None
+            if field_exists:
+                try:
+                    cursor.execute("DROP INDEX crm_lead_leads_u_4b92b3_idx ON crm_lead")
+                    cursor.execute(f"ALTER TABLE {db_table} DROP COLUMN leads_uploaded_on")
+                except Exception:
+                    pass
 
 
 def reverse_migration(apps, schema_editor):
     """Reverse migration - convert source back to leads_uploaded_on format"""
     Lead = apps.get_model('crm', 'Lead')
     from django.utils import timezone
+    from django.db import connection
+    
+    # Add the field back if reversing
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            ALTER TABLE crm_lead 
+            ADD COLUMN leads_uploaded_on VARCHAR(255) DEFAULT ''
+        """)
+    
     for lead in Lead.objects.exclude(source__isnull=True).exclude(source=''):
         if lead.source != 'manual':
             # Convert back to "filename|timestamp" format
@@ -32,28 +150,21 @@ def reverse_migration(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('crm', '0006_add_leads_uploaded_on'),
+        ('crm', '0005_alter_lead_email_alter_lead_owner_and_more'),
     ]
 
     operations = [
-        # First, add source field if it doesn't exist with proper attributes
+        # First, alter source field with proper attributes
         migrations.AlterField(
             model_name='lead',
             name='source',
             field=models.CharField(blank=True, db_index=True, help_text="Source of lead: 'manual' for manually created, or filename for Excel uploads", max_length=128),
         ),
-        # Migrate data
+        # Migrate data (if leads_uploaded_on field exists)
         migrations.RunPython(migrate_leads_uploaded_on_to_source, reverse_migration),
-        # Remove old field and index
-        migrations.RemoveIndex(
-            model_name='lead',
-            name='crm_lead_leads_u_4b92b3_idx',
-        ),
-        migrations.RemoveField(
-            model_name='lead',
-            name='leads_uploaded_on',
-        ),
-        # Ensure source has index
+        # Remove old field and index if they exist
+        migrations.RunPython(remove_leads_uploaded_on_field_and_index, migrations.RunPython.noop),
+        # Ensure source has index (AddIndex will be a no-op if index already exists)
         migrations.AddIndex(
             model_name='lead',
             index=models.Index(fields=['source'], name='crm_lead_source_0cf4cf_idx'),
