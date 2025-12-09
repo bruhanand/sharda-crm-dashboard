@@ -3,7 +3,7 @@ Hierarchical Forecast Service - Auto-Generated Complete Forecast Engine
 Generates State → Dealer → Location forecasts plus Range & Sector forecasts
 Optimized for 1 vCPU with limited grid search and timeouts
 """
-from django.db.models import Count, Sum, Q, Avg
+from django.db.models import Count, Sum, Q, Avg, Min, Max
 from django.db.models.functions import TruncWeek, TruncMonth
 from django.utils import timezone
 from datetime import timedelta
@@ -126,11 +126,37 @@ def prepare_weekly_time_series(queryset, group_by_field, date_field='enquiry_dat
     Prepare weekly time series data for forecasting
     Aggregates data by week and grouping field (state, dealer, location, etc.)
     Returns dictionary of DataFrames keyed by group value
-    """
-    cutoff_date = timezone.now().date() - timedelta(weeks=weeks_back)
     
-    # Filter queryset
-    filtered_qs = queryset.filter(**{f'{date_field}__gte': cutoff_date})
+    Note: Uses the queryset as-is if it already has date filters applied.
+    Only applies default cutoff if queryset has no date filters.
+    """
+    # Check if queryset already has date filters by examining the query
+    # If the queryset is already filtered by date, use it as-is
+    # Otherwise, apply a reasonable default cutoff (52 weeks back)
+    filtered_qs = queryset
+    
+    # Check if queryset already has date filters applied
+    # If user provided start_date/end_date, use queryset as-is
+    # Otherwise apply default cutoff for reasonable data range
+    has_date_filter = False
+    try:
+        # Check query for existing date filters
+        query_str = str(queryset.query).lower()
+        date_field_lower = date_field.lower()
+        if f'{date_field_lower}__gte' in query_str or f'{date_field_lower}__lte' in query_str or f'{date_field_lower}__range' in query_str:
+            has_date_filter = True
+            print(f"Date filter detected in queryset for {date_field}, using queryset as-is")
+    except Exception as e:
+        print(f"Error checking query: {e}")
+    
+    # Only apply default cutoff if no date filters exist
+    if not has_date_filter:
+        cutoff_date = timezone.now().date() - timedelta(weeks=weeks_back)
+        filtered_qs = queryset.filter(**{f'{date_field}__gte': cutoff_date})
+        print(f"No date filter found, applying default cutoff: {cutoff_date}")
+    else:
+        filtered_qs = queryset
+        print(f"Using queryset with existing date filters, count: {queryset.count()}")
     
     # Get weekly aggregated data
     weekly_data = list(
@@ -144,7 +170,14 @@ def prepare_weekly_time_series(queryset, group_by_field, date_field='enquiry_dat
         .order_by('week_truncated', group_by_field)
     )
     
+    print(f"prepare_weekly_time_series: Found {len(weekly_data)} weekly data points for {group_by_field}")
+    
     if not weekly_data:
+        print(f"Warning: No weekly data found for {group_by_field}. Queryset count: {filtered_qs.count()}")
+        # Debug: Check what states/values exist
+        if group_by_field == 'state':
+            states = filtered_qs.values_list('state', flat=True).distinct().exclude(state__isnull=True).exclude(state='')
+            print(f"Available {group_by_field} values: {list(states)[:10]}")
         return {}
     
     # Convert to DataFrame and group by group_by_field value
@@ -161,10 +194,18 @@ def prepare_weekly_time_series(queryset, group_by_field, date_field='enquiry_dat
         if metric in ['order_value', 'both']:
             time_series_dict[f'{group_value}_value'][week] += float(item['order_value_sum'] or 0)
     
+    print(f"prepare_weekly_time_series: Grouped into {len(time_series_dict)} {group_by_field} groups")
+    
+    print(f"prepare_weekly_time_series: Grouped into {len(time_series_dict)} {group_by_field} groups")
+    
     # Convert each group to DataFrame
     result = {}
+    skipped_insufficient_data = 0
     for key, week_dict in time_series_dict.items():
-        if len(week_dict) < 4:  # Need at least 4 weeks
+        # Reduced minimum to 2 weeks for flexibility (can still forecast with less data)
+        if len(week_dict) < 2:
+            skipped_insufficient_data += 1
+            print(f"Skipping {key}: only {len(week_dict)} weeks of data (need 2+)")
             continue
         
         # Convert to list of dicts
@@ -175,9 +216,15 @@ def prepare_weekly_time_series(queryset, group_by_field, date_field='enquiry_dat
         df = df.set_index('ds').sort_index()
         df = df.resample('W').sum()  # Ensure weekly frequency
         
-        if len(df) >= 4:
+        # Accept data with at least 2 weeks (reduced from 4 for flexibility)
+        if len(df) >= 2:
             result[key] = df
+            print(f"Added {key} to result with {len(df)} weeks of data")
+        else:
+            skipped_insufficient_data += 1
+            print(f"Skipping {key} after resampling: only {len(df)} weeks (need 2+)")
     
+    print(f"prepare_weekly_time_series: Returning {len(result)} valid time series (skipped {skipped_insufficient_data} with insufficient data)")
     return result
 
 
@@ -298,9 +345,63 @@ def forecast_state(queryset, horizon_weeks, metric='both'):
     Forecast state-level demand
     Trains SARIMA model on weekly historical data aggregated by state
     """
+    print(f"forecast_state: Starting with queryset count: {queryset.count()}")
     time_series_data = prepare_weekly_time_series(queryset, 'state', metric=metric)
     
+    print(f"forecast_state: Got {len(time_series_data)} states with time series data")
     if not time_series_data:
+        print("Warning: No time series data returned from prepare_weekly_time_series")
+        # Try to get states from queryset directly to see what's available
+        states = queryset.values_list('state', flat=True).distinct().exclude(state__isnull=True).exclude(state='')
+        states_list = list(states)
+        print(f"Available states in queryset: {states_list[:10]}")
+        
+        # Fallback: If we have states but no time series, create simple forecasts using averages
+        if states_list:
+            print(f"Creating fallback forecasts for {len(states_list)} states using simple averages")
+            current_date = timezone.now().date()
+            fallback_forecasts = []
+            
+            # Calculate date range for averaging - use a reasonable default
+            # If user provided date range, estimate weeks from that, otherwise use 52 weeks
+            date_range_weeks = 52  # Default
+            try:
+                min_date = queryset.aggregate(min_date=Min('enquiry_date'))['min_date']
+                max_date = queryset.aggregate(max_date=Max('enquiry_date'))['max_date']
+                if min_date and max_date:
+                    date_range_days = (max_date - min_date).days
+                    date_range_weeks = max(1, date_range_days / 7)
+            except:
+                pass
+            
+            for state in states_list:
+                state_qs = queryset.filter(state=state)
+                total_count = state_qs.count()
+                # Estimate weekly average based on total count and date range
+                weekly_avg = max(0.1, total_count / max(1, date_range_weeks)) if total_count > 0 else 0.1
+                
+                forecast_weeks = []
+                for i in range(horizon_weeks):
+                    week_start = current_date + timedelta(weeks=i)
+                    week_key = week_start.strftime('%Y-W%W')
+                    forecast_weeks.append({
+                        'week': week_key,
+                        'date': week_start.isoformat(),
+                        'forecasted_enquiries': int(weekly_avg) if metric in ['enquiries', 'both'] else None,
+                        'forecasted_value': 0 if metric in ['order_value', 'both'] else None,
+                    })
+                
+                fallback_forecasts.append({
+                    'state': state,
+                    'forecast_weeks': forecast_weeks,
+                    'total_forecasted_enquiries': int(weekly_avg * horizon_weeks) if metric in ['enquiries', 'both'] else 0,
+                    'total_forecasted_value': 0 if metric in ['order_value', 'both'] else 0,
+                    'confidence': 'low',
+                    'model_used': 'Simple Average (Fallback)'
+                })
+            
+            return fallback_forecasts
+        
         return []
     
     state_forecasts = []
@@ -630,9 +731,60 @@ def forecast_range(queryset, horizon_weeks, metric='both'):
     Independent forecast for KVA Range (not part of hierarchy)
     Trains separate SARIMA model for each kva_range
     """
+    print(f"forecast_range: Starting with queryset count: {queryset.count()}")
     time_series_data = prepare_weekly_time_series(queryset, 'kva_range', metric=metric)
     
+    print(f"forecast_range: Got {len(time_series_data)} kva ranges with time series data")
     if not time_series_data:
+        print("Warning: No time series data for kva_range, trying fallback")
+        # Fallback: Get kva ranges and create simple forecasts
+        kva_ranges = queryset.values_list('kva_range', flat=True).distinct().exclude(kva_range__isnull=True).exclude(kva_range='')
+        kva_ranges_list = list(kva_ranges)
+        print(f"Available kva_range values: {kva_ranges_list[:10]}")
+        
+        if kva_ranges_list:
+            print(f"Creating fallback forecasts for {len(kva_ranges_list)} kva ranges")
+            current_date = timezone.now().date()
+            fallback_forecasts = {}
+            
+            # Calculate date range for averaging
+            date_range_weeks = 52
+            try:
+                min_date = queryset.aggregate(min_date=Min('enquiry_date'))['min_date']
+                max_date = queryset.aggregate(max_date=Max('enquiry_date'))['max_date']
+                if min_date and max_date:
+                    date_range_days = (max_date - min_date).days
+                    date_range_weeks = max(1, date_range_days / 7)
+            except:
+                pass
+            
+            for kva_range in kva_ranges_list:
+                range_qs = queryset.filter(kva_range=kva_range)
+                total_count = range_qs.count()
+                weekly_avg = max(0.1, total_count / max(1, date_range_weeks)) if total_count > 0 else 0.1
+                
+                forecast_weeks = []
+                for i in range(horizon_weeks):
+                    week_start = current_date + timedelta(weeks=i)
+                    week_key = week_start.strftime('%Y-W%W')
+                    forecast_weeks.append({
+                        'week': week_key,
+                        'date': week_start.isoformat(),
+                        'forecasted_enquiries': int(weekly_avg) if metric in ['enquiries', 'both'] else None,
+                        'forecasted_value': 0 if metric in ['order_value', 'both'] else None,
+                    })
+                
+                fallback_forecasts[kva_range] = {
+                    'kva_range': kva_range,
+                    'forecast_weeks': forecast_weeks,
+                    'total_forecasted_enquiries': int(weekly_avg * horizon_weeks) if metric in ['enquiries', 'both'] else 0,
+                    'total_forecasted_value': 0 if metric in ['order_value', 'both'] else 0,
+                    'confidence': 'low',
+                    'model_used': 'Simple Average (Fallback)'
+                }
+            
+            return fallback_forecasts
+        
         return {}
     
     range_forecasts = {}
@@ -699,9 +851,60 @@ def forecast_sector(queryset, horizon_weeks, metric='both'):
     Independent forecast for Sector (segment field) - not part of hierarchy
     Trains separate SARIMA model for each segment
     """
+    print(f"forecast_sector: Starting with queryset count: {queryset.count()}")
     time_series_data = prepare_weekly_time_series(queryset, 'segment', metric=metric)
     
+    print(f"forecast_sector: Got {len(time_series_data)} sectors with time series data")
     if not time_series_data:
+        print("Warning: No time series data for segment, trying fallback")
+        # Fallback: Get segments and create simple forecasts
+        segments = queryset.values_list('segment', flat=True).distinct().exclude(segment__isnull=True).exclude(segment='')
+        segments_list = list(segments)
+        print(f"Available segment values: {segments_list[:10]}")
+        
+        if segments_list:
+            print(f"Creating fallback forecasts for {len(segments_list)} sectors")
+            current_date = timezone.now().date()
+            fallback_forecasts = {}
+            
+            # Calculate date range for averaging
+            date_range_weeks = 52
+            try:
+                min_date = queryset.aggregate(min_date=Min('enquiry_date'))['min_date']
+                max_date = queryset.aggregate(max_date=Max('enquiry_date'))['max_date']
+                if min_date and max_date:
+                    date_range_days = (max_date - min_date).days
+                    date_range_weeks = max(1, date_range_days / 7)
+            except:
+                pass
+            
+            for segment in segments_list:
+                segment_qs = queryset.filter(segment=segment)
+                total_count = segment_qs.count()
+                weekly_avg = max(0.1, total_count / max(1, date_range_weeks)) if total_count > 0 else 0.1
+                
+                forecast_weeks = []
+                for i in range(horizon_weeks):
+                    week_start = current_date + timedelta(weeks=i)
+                    week_key = week_start.strftime('%Y-W%W')
+                    forecast_weeks.append({
+                        'week': week_key,
+                        'date': week_start.isoformat(),
+                        'forecasted_enquiries': int(weekly_avg) if metric in ['enquiries', 'both'] else None,
+                        'forecasted_value': 0 if metric in ['order_value', 'both'] else None,
+                    })
+                
+                fallback_forecasts[segment] = {
+                    'sector': segment,
+                    'forecast_weeks': forecast_weeks,
+                    'total_forecasted_enquiries': int(weekly_avg * horizon_weeks) if metric in ['enquiries', 'both'] else 0,
+                    'total_forecasted_value': 0 if metric in ['order_value', 'both'] else 0,
+                    'confidence': 'low',
+                    'model_used': 'Simple Average (Fallback)'
+                }
+            
+            return fallback_forecasts
+        
         return {}
     
     sector_forecasts = {}

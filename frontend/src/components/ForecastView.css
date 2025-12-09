@@ -82,6 +82,93 @@
     transition: all 0.2s;
 }
 
+/* Date input wrapper with calendar icon */
+.date-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.date-input-wrapper .date-input {
+    flex: 1;
+    padding-right: 45px;
+    cursor: pointer;
+}
+
+.date-input-wrapper .date-input::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0;
+    position: absolute;
+    right: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.calendar-icon-btn {
+    position: absolute;
+    right: 8px;
+    background: transparent;
+    border: none;
+    color: #9ea4b9;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+}
+
+.calendar-icon-btn:hover:not(:disabled) {
+    background: rgba(139, 92, 246, 0.1);
+    color: #8b5cf6;
+    transform: scale(1.1);
+}
+
+.calendar-icon-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Improve date input appearance */
+.date-input {
+    cursor: pointer;
+}
+
+.date-input:focus {
+    border-color: #8b5cf6;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+}
+
+/* For browsers that support showPicker */
+.date-input::-webkit-datetime-edit {
+    color: #f5f6fa;
+}
+
+.date-input::-webkit-datetime-edit-fields-wrapper {
+    color: #f5f6fa;
+}
+
+.date-input::-webkit-datetime-edit-text {
+    color: #9ea4b9;
+}
+
+.date-input::-webkit-datetime-edit-month-field,
+.date-input::-webkit-datetime-edit-day-field,
+.date-input::-webkit-datetime-edit-year-field {
+    color: #f5f6fa;
+}
+
+.date-input::-webkit-inner-spin-button,
+.date-input::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.7;
+}
+
 .forecast-input-group select:focus,
 .forecast-input-group input:focus {
     outline: none;
@@ -381,6 +468,37 @@
 
 .forecast-info-panel .info-section.warning ul {
     color: #d1d5db;
+}
+
+/* Loading animation */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+}
+
+.forecast-loading-message {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.forecast-error-message,
+.forecast-success-message {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 @media (max-width: 768px) {

@@ -19,6 +19,8 @@ const ForecastView = ({ forecastData: legacyForecastData, filters, setFilters })
     const [hierarchicalForecast, setHierarchicalForecast] = useState(null)
     const [stateOptions, setStateOptions] = useState([])
     const [dealerOptions, setDealerOptions] = useState([])
+    const [error, setError] = useState(null)
+    const [successMessage, setSuccessMessage] = useState(null)
 
     // Fetch state and dealer options
     useEffect(() => {
@@ -38,7 +40,13 @@ const ForecastView = ({ forecastData: legacyForecastData, filters, setFilters })
     }, [])
 
     const generateForecast = async () => {
+        console.log('Generate Forecast button clicked')
         setIsGenerating(true)
+        setError(null)
+        setSuccessMessage(null)
+        
+        console.log('isGenerating set to true')
+        
         try {
             const params = {
                 horizon,
@@ -64,11 +72,59 @@ const ForecastView = ({ forecastData: legacyForecastData, filters, setFilters })
                 params.end_date = endDate
             }
 
+            console.log('Generating forecast with params:', params)
             const response = await apiRequest('forecast/', { params })
-            setHierarchicalForecast(response)
+            console.log('Forecast response received:', response)
+            console.log('Range forecast:', response?.range_forecast)
+            console.log('Sector forecast:', response?.sector_forecast)
+            console.log('State forecast count:', response?.state_forecast?.length)
+            console.log('Dealer forecast count:', response?.dealer_forecast?.length)
+            console.log('Location forecast count:', response?.location_forecast?.length)
+            
+            if (response && (response.state_forecast || response.summary)) {
+                setHierarchicalForecast(response)
+                const summary = response.summary || {}
+                setSuccessMessage(
+                    `Forecast generated successfully! ` +
+                    `${summary.num_states || 0} states, ` +
+                    `${summary.num_dealers || 0} dealers, ` +
+                    `${summary.num_locations || 0} locations, ` +
+                    `${summary.num_ranges || 0} ranges, ` +
+                    `${summary.num_sectors || 0} sectors forecasted.`
+                )
+            } else {
+                throw new Error('Invalid response from server')
+            }
         } catch (error) {
             console.error('Error generating forecast:', error)
-            alert('Failed to generate forecast. Please try again.')
+            
+            let errorMessage = 'Failed to generate forecast. Please try again.'
+            
+            if (error.message) {
+                if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+                    errorMessage = 'Authentication failed. Please log in again.'
+                } else if (error.message.includes('403') || error.message.includes('Forbidden')) {
+                    errorMessage = 'You do not have permission to generate forecasts. Admin access required.'
+                } else if (error.message.includes('500') || error.message.includes('Internal Server Error')) {
+                    errorMessage = 'Server error occurred. Please try again later or contact support.'
+                } else if (error.message.includes('Network') || error.message.includes('fetch')) {
+                    errorMessage = 'Network error: Unable to connect to server. Please check your connection.'
+                } else {
+                    errorMessage = error.message
+                }
+            }
+            
+            if (error.details) {
+                console.error('Error details:', error.details)
+                if (error.details.detail) {
+                    errorMessage = error.details.detail
+                } else if (error.details.error) {
+                    errorMessage = error.details.error
+                }
+            }
+            
+            setError(errorMessage)
+            setHierarchicalForecast(null)
         } finally {
             setIsGenerating(false)
         }
@@ -126,18 +182,50 @@ const ForecastView = ({ forecastData: legacyForecastData, filters, setFilters })
         })
 
         // Range forecast (convert to chart format)
-        const rangeChartData = Object.values(range_forecast).map(r => ({
-            range: r.kva_range,
-            total_enquiries: r.total_forecasted_enquiries,
-            total_value: r.total_forecasted_value
-        }))
+        // Backend returns: { "kva_range_name": { kva_range, forecast_weeks, total_forecasted_enquiries, ... } }
+        let rangeChartData = []
+        if (range_forecast && typeof range_forecast === 'object' && !Array.isArray(range_forecast)) {
+            rangeChartData = Object.entries(range_forecast)
+                .map(([key, r]) => ({
+                    range: r.kva_range || key || 'Unknown',
+                    total_enquiries: r.total_forecasted_enquiries || 0,
+                    total_value: r.total_forecasted_value || 0,
+                    confidence: r.confidence || 'low'
+                }))
+                .filter(r => r.range && r.range !== 'Unknown')
+        } else if (Array.isArray(range_forecast)) {
+            rangeChartData = range_forecast.map(r => ({
+                range: r.kva_range || 'Unknown',
+                total_enquiries: r.total_forecasted_enquiries || 0,
+                total_value: r.total_forecasted_value || 0,
+                confidence: r.confidence || 'low'
+            }))
+        }
 
         // Sector forecast (convert to chart format)
-        const sectorChartData = Object.values(sector_forecast).map(s => ({
-            sector: s.sector,
-            total_enquiries: s.total_forecasted_enquiries,
-            total_value: s.total_forecasted_value
-        }))
+        // Backend returns: { "segment_name": { sector, forecast_weeks, total_forecasted_enquiries, ... } }
+        let sectorChartData = []
+        if (sector_forecast && typeof sector_forecast === 'object' && !Array.isArray(sector_forecast)) {
+            sectorChartData = Object.entries(sector_forecast)
+                .map(([key, s]) => ({
+                    sector: s.sector || key || 'Unknown',
+                    total_enquiries: s.total_forecasted_enquiries || 0,
+                    total_value: s.total_forecasted_value || 0,
+                    confidence: s.confidence || 'low'
+                }))
+                .filter(s => s.sector && s.sector !== 'Unknown')
+        } else if (Array.isArray(sector_forecast)) {
+            sectorChartData = sector_forecast.map(s => ({
+                sector: s.sector || 'Unknown',
+                total_enquiries: s.total_forecasted_enquiries || 0,
+                total_value: s.total_forecasted_value || 0,
+                confidence: s.confidence || 'low'
+            }))
+        }
+        
+        console.log('Range forecast data:', range_forecast, 'Processed:', rangeChartData)
+        console.log('Sector forecast data:', sector_forecast, 'Processed:', sectorChartData)
+        console.log('Full hierarchical forecast:', hierarchicalForecast)
 
         return {
             stateSummary,
@@ -269,12 +357,62 @@ const ForecastView = ({ forecastData: legacyForecastData, filters, setFilters })
                             Start Date (Optional)
                             <span className="info-icon" title="Filter historical data: Only use enquiries from this date onwards for training the forecast models">ℹ️</span>
                         </label>
-                        <input 
-                            type="date"
-                            value={startDate}
-                            onChange={(e) => setStartDate(e.target.value)}
-                            disabled={isGenerating}
-                        />
+                        <div 
+                            className="date-input-wrapper"
+                            onClick={() => {
+                                if (!isGenerating) {
+                                    const input = document.getElementById('start-date-input')
+                                    if (input) {
+                                        // Try showPicker() first (modern browsers)
+                                        if (typeof input.showPicker === 'function') {
+                                            input.showPicker()
+                                        } else {
+                                            // Fallback: focus and click
+                                            input.focus()
+                                            input.click()
+                                        }
+                                    }
+                                }
+                            }}
+                        >
+                            <input 
+                                type="date"
+                                id="start-date-input"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                disabled={isGenerating}
+                                className="date-input"
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (!isGenerating) {
+                                        const input = e.target
+                                        if (typeof input.showPicker === 'function') {
+                                            input.showPicker()
+                                        }
+                                    }
+                                }}
+                            />
+                            <button
+                                type="button"
+                                className="calendar-icon-btn"
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    const input = document.getElementById('start-date-input')
+                                    if (input && !isGenerating) {
+                                        if (typeof input.showPicker === 'function') {
+                                            input.showPicker()
+                                        } else {
+                                            input.focus()
+                                            input.click()
+                                        }
+                                    }
+                                }}
+                                disabled={isGenerating}
+                                title="Open calendar"
+                            >
+                                📅
+                            </button>
+                        </div>
                         <small>
                             <strong>Purpose:</strong> Limit historical data used for forecasting. Only enquiries from this date onwards will be used to train the SARIMA models.
                             <br />
@@ -287,12 +425,62 @@ const ForecastView = ({ forecastData: legacyForecastData, filters, setFilters })
                             End Date (Optional)
                             <span className="info-icon" title="Filter historical data: Only use enquiries up to this date for training the forecast models">ℹ️</span>
                         </label>
-                        <input 
-                            type="date"
-                            value={endDate}
-                            onChange={(e) => setEndDate(e.target.value)}
-                            disabled={isGenerating}
-                        />
+                        <div 
+                            className="date-input-wrapper"
+                            onClick={() => {
+                                if (!isGenerating) {
+                                    const input = document.getElementById('end-date-input')
+                                    if (input) {
+                                        // Try showPicker() first (modern browsers)
+                                        if (typeof input.showPicker === 'function') {
+                                            input.showPicker()
+                                        } else {
+                                            // Fallback: focus and click
+                                            input.focus()
+                                            input.click()
+                                        }
+                                    }
+                                }
+                            }}
+                        >
+                            <input 
+                                type="date"
+                                id="end-date-input"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                disabled={isGenerating}
+                                className="date-input"
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (!isGenerating) {
+                                        const input = e.target
+                                        if (typeof input.showPicker === 'function') {
+                                            input.showPicker()
+                                        }
+                                    }
+                                }}
+                            />
+                            <button
+                                type="button"
+                                className="calendar-icon-btn"
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    const input = document.getElementById('end-date-input')
+                                    if (input && !isGenerating) {
+                                        if (typeof input.showPicker === 'function') {
+                                            input.showPicker()
+                                        } else {
+                                            input.focus()
+                                            input.click()
+                                        }
+                                    }
+                                }}
+                                disabled={isGenerating}
+                                title="Open calendar"
+                            >
+                                📅
+                            </button>
+                        </div>
                         <small>
                             <strong>Purpose:</strong> Limit historical data used for forecasting. Only enquiries up to this date will be used to train the SARIMA models.
                             <br />
@@ -302,18 +490,76 @@ const ForecastView = ({ forecastData: legacyForecastData, filters, setFilters })
 
                     <div className="forecast-input-group forecast-generate-btn">
                         <button 
-                            onClick={generateForecast}
+                            onClick={(e) => {
+                                e.preventDefault()
+                                console.log('Button clicked, calling generateForecast')
+                                generateForecast()
+                            }}
                             disabled={isGenerating}
                             className="generate-forecast-btn"
+                            type="button"
                         >
-                            {isGenerating ? 'Generating Forecast...' : 'Generate Forecast Report'}
+                            {isGenerating ? (
+                                <>
+                                    <span style={{ marginRight: '8px' }}>⏳</span>
+                                    Generating Forecast...
+                                </>
+                            ) : (
+                                'Generate Forecast Report'
+                            )}
                         </button>
+                        {isGenerating && (
+                            <small style={{ 
+                                color: '#8b5cf6', 
+                                marginTop: '8px', 
+                                display: 'block',
+                                textAlign: 'center',
+                                fontWeight: '500'
+                            }}>
+                                Please wait, this may take 30-60 seconds...
+                            </small>
+                        )}
                     </div>
                 </div>
             </div>
 
+            {/* Error Message */}
+            {error && (
+                <div className="forecast-error-message" style={{
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.5)',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    marginTop: '24px',
+                    color: '#ef4444'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '20px' }}>⚠️</span>
+                        <strong style={{ fontSize: '16px' }}>Error Generating Forecast</strong>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '14px', lineHeight: '1.5' }}>{error}</p>
+                </div>
+            )}
+
+            {/* Success Message */}
+            {successMessage && !error && (
+                <div className="forecast-success-message" style={{
+                    background: 'rgba(16, 185, 129, 0.1)',
+                    border: '1px solid rgba(16, 185, 129, 0.5)',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    marginTop: '24px',
+                    color: '#10b981'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '20px' }}>✅</span>
+                        <p style={{ margin: 0, fontSize: '14px', lineHeight: '1.5' }}>{successMessage}</p>
+                    </div>
+                </div>
+            )}
+
             {/* Message when no forecast generated yet */}
-            {!hierarchicalForecast && !isGenerating && (
+            {!hierarchicalForecast && !isGenerating && !error && (
                 <div className="forecast-info-panel">
                     <div className="info-section">
                         <h4>📋 How to Generate Forecast</h4>
@@ -355,19 +601,37 @@ const ForecastView = ({ forecastData: legacyForecastData, filters, setFilters })
 
             {/* Loading state */}
             {isGenerating && (
-                <div style={{
+                <div className="forecast-loading-message" style={{
                     background: '#1a1d24',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    border: '2px solid rgba(139, 92, 246, 0.5)',
                     borderRadius: '12px',
-                    padding: '32px',
+                    padding: '40px',
                     textAlign: 'center',
-                    marginTop: '24px'
+                    marginTop: '24px',
+                    animation: 'pulse 2s ease-in-out infinite'
                 }}>
-                    <div style={{ color: '#8b5cf6', fontSize: '18px', marginBottom: '12px' }}>
-                        ⏳ Generating forecast... This may take a moment.
+                    <div style={{ 
+                        color: '#8b5cf6', 
+                        fontSize: '24px', 
+                        marginBottom: '16px',
+                        fontWeight: '600'
+                    }}>
+                        ⏳ Generating Forecast...
                     </div>
-                    <p style={{ color: '#9ea4b9', fontSize: '14px' }}>
+                    <div style={{
+                        width: '50px',
+                        height: '50px',
+                        border: '4px solid rgba(139, 92, 246, 0.2)',
+                        borderTop: '4px solid #8b5cf6',
+                        borderRadius: '50%',
+                        animation: 'spin 1s linear infinite',
+                        margin: '0 auto 20px'
+                    }}></div>
+                    <p style={{ color: '#9ea4b9', fontSize: '14px', marginBottom: '8px' }}>
                         Training SARIMA models and calculating hierarchical forecasts...
+                    </p>
+                    <p style={{ color: '#6b7280', fontSize: '12px', margin: 0 }}>
+                        This may take 30-60 seconds depending on data size
                     </p>
                 </div>
             )}
@@ -402,73 +666,73 @@ const ForecastView = ({ forecastData: legacyForecastData, filters, setFilters })
 
                     <div className="charts-bento-grid">
                         {/* State Forecast */}
-                        <ChartCard
+                <ChartCard
                             eyebrow="State-Level Forecast"
                             title="Forecast by State"
-                            colSpan={2}
+                    colSpan={2}
                             info="Root-level state forecasts using SARIMA models"
-                        >
+                >
                             {forecastSummary.stateSummary.length > 0 ? (
-                                <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={forecastSummary.stateSummary.slice(0, 15)} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                                        <XAxis
-                                            dataKey="state"
-                                            stroke="#9ea4b9"
-                                            fontSize={11}
-                                            angle={-45}
-                                            textAnchor="end"
-                                            height={80}
-                                        />
-                                        <YAxis stroke="#9ea4b9" fontSize={12} />
-                                        <Tooltip
-                                            contentStyle={{
-                                                background: '#1a1d24',
-                                                border: '1px solid rgba(255,255,255,0.1)',
-                                                borderRadius: '8px',
-                                                color: '#f5f6fa',
-                                            }}
-                                        />
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                                <XAxis
+                                    dataKey="state"
+                                    stroke="#9ea4b9"
+                                    fontSize={11}
+                                    angle={-45}
+                                    textAnchor="end"
+                                    height={80}
+                                />
+                                <YAxis stroke="#9ea4b9" fontSize={12} />
+                                <Tooltip
+                                    contentStyle={{
+                                        background: '#1a1d24',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        borderRadius: '8px',
+                                        color: '#f5f6fa',
+                                    }}
+                                />
                                         <Bar dataKey="total_enquiries" fill={COLORS.forecast} radius={[4, 4, 0, 0]} name="Forecasted Enquiries" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            ) : (
+                            </BarChart>
+                        </ResponsiveContainer>
+                    ) : (
                                 <div className="no-data">No state forecast data available</div>
-                            )}
-                        </ChartCard>
+                    )}
+                </ChartCard>
 
                         {/* Range Forecast */}
-                        <ChartCard
+                <ChartCard
                             eyebrow="Product Range Forecast"
                             title="Forecast by KVA Range"
-                            colSpan={2}
+                    colSpan={2}
                             info="Independent range forecasts for product mix insights"
-                        >
+                >
                             {forecastSummary.rangeChartData.length > 0 ? (
-                                <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={forecastSummary.rangeChartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                                        <XAxis
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                                <XAxis
                                             dataKey="range"
-                                            stroke="#9ea4b9"
+                                    stroke="#9ea4b9"
                                             fontSize={11}
                                             angle={-45}
                                             textAnchor="end"
                                             height={80}
-                                        />
-                                        <YAxis stroke="#9ea4b9" fontSize={12} />
-                                        <Tooltip
-                                            contentStyle={{
-                                                background: '#1a1d24',
-                                                border: '1px solid rgba(255,255,255,0.1)',
-                                                borderRadius: '8px',
-                                                color: '#f5f6fa',
-                                            }}
-                                        />
+                                />
+                                <YAxis stroke="#9ea4b9" fontSize={12} />
+                                <Tooltip
+                                    contentStyle={{
+                                        background: '#1a1d24',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        borderRadius: '8px',
+                                        color: '#f5f6fa',
+                                    }}
+                                />
                                         <Bar dataKey="total_enquiries" fill={COLORS.kva[0]} radius={[4, 4, 0, 0]} name="Forecasted Enquiries" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            ) : (
+                            </BarChart>
+                        </ResponsiveContainer>
+                    ) : (
                                 <div className="no-data">No range forecast data available</div>
                             )}
                         </ChartCard>
@@ -508,47 +772,147 @@ const ForecastView = ({ forecastData: legacyForecastData, filters, setFilters })
                                 </ResponsiveContainer>
                             ) : (
                                 <div className="no-data">No sector forecast data available</div>
-                            )}
-                        </ChartCard>
-                    </div>
+                    )}
+                </ChartCard>
+            </div>
 
                     {/* Detailed Breakdown Tables */}
                     <div className="forecast-details">
                         <h3>Detailed Forecast Breakdown</h3>
                         
                         {/* State → Dealer Breakdown */}
-                        <div className="forecast-breakdown-section">
-                            <h4>State → Dealer Breakdown</h4>
-                            {Object.entries(forecastSummary.dealerByState).slice(0, 5).map(([state, dealers]) => (
-                                <div key={state} className="breakdown-group">
-                                    <h5>{state} ({dealers.length} dealers)</h5>
-                                    <div className="breakdown-table">
-                                        <table>
-                                            <thead>
-                                                <tr>
-                                                    <th>Dealer</th>
-                                                    <th>Forecasted Enquiries</th>
-                                                    <th>Forecasted Value</th>
-                                                    <th>Confidence</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {dealers.slice(0, 10).map((dealer, idx) => (
-                                                    <tr key={idx}>
-                                                        <td>{dealer.dealer}</td>
-                                                        <td>{dealer.total_enquiries?.toLocaleString() || 0}</td>
-                                                        <td>₹{dealer.total_value?.toLocaleString() || 0}</td>
-                                                        <td className={`confidence-${dealer.confidence}`}>
-                                                            {dealer.confidence?.toUpperCase() || 'LOW'}
-                                                        </td>
+                        {Object.keys(forecastSummary.dealerByState).length > 0 && (
+                            <div className="forecast-breakdown-section">
+                                <h4>State → Dealer Breakdown</h4>
+                                {Object.entries(forecastSummary.dealerByState).slice(0, 5).map(([state, dealers]) => (
+                                    <div key={state} className="breakdown-group">
+                                        <h5>{state} ({dealers.length} dealers)</h5>
+                                        <div className="breakdown-table">
+                                            <table>
+                                                <thead>
+                                                    <tr>
+                                                        <th>Dealer</th>
+                                                        <th>Forecasted Enquiries</th>
+                                                        <th>Forecasted Value</th>
+                                                        <th>Confidence</th>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                                </thead>
+                                                <tbody>
+                                                    {dealers.slice(0, 10).map((dealer, idx) => (
+                                                        <tr key={idx}>
+                                                            <td>{dealer.dealer}</td>
+                                                            <td>{dealer.total_enquiries?.toLocaleString() || 0}</td>
+                                                            <td>₹{dealer.total_value?.toLocaleString() || 0}</td>
+                                                            <td className={`confidence-${dealer.confidence}`}>
+                                                                {dealer.confidence?.toUpperCase() || 'LOW'}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Dealer → Location Breakdown */}
+                        {Object.keys(forecastSummary.locationByDealer).length > 0 && (
+                            <div className="forecast-breakdown-section">
+                                <h4>Dealer → Location Breakdown</h4>
+                                {Object.entries(forecastSummary.locationByDealer).slice(0, 5).map(([dealer, locations]) => (
+                                    <div key={dealer} className="breakdown-group">
+                                        <h5>{dealer} ({locations.length} locations)</h5>
+                                        <div className="breakdown-table">
+                                            <table>
+                                                <thead>
+                                                    <tr>
+                                                        <th>Location</th>
+                                                        <th>Forecasted Enquiries</th>
+                                                        <th>Forecasted Value</th>
+                                                        <th>Confidence</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {locations.slice(0, 10).map((location, idx) => (
+                                                        <tr key={idx}>
+                                                            <td>{location.location}</td>
+                                                            <td>{location.total_enquiries?.toLocaleString() || 0}</td>
+                                                            <td>₹{location.total_value?.toLocaleString() || 0}</td>
+                                                            <td className={`confidence-${location.confidence}`}>
+                                                                {location.confidence?.toUpperCase() || 'LOW'}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Range Forecast Details */}
+                        {forecastSummary.rangeChartData && forecastSummary.rangeChartData.length > 0 && (
+                            <div className="forecast-breakdown-section">
+                                <h4>KVA Range Forecast Details</h4>
+                                <div className="breakdown-table">
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>KVA Range</th>
+                                                <th>Forecasted Enquiries</th>
+                                                <th>Forecasted Value</th>
+                                                <th>Confidence</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {forecastSummary.rangeChartData.map((range, idx) => (
+                                                <tr key={idx}>
+                                                    <td>{range.range}</td>
+                                                    <td>{range.total_enquiries?.toLocaleString() || 0}</td>
+                                                    <td>₹{range.total_value?.toLocaleString() || 0}</td>
+                                                    <td className={`confidence-${range.confidence || 'low'}`}>
+                                                        {(range.confidence || 'LOW').toUpperCase()}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
-                            ))}
-                        </div>
+                            </div>
+                        )}
+
+                        {/* Sector Forecast Details */}
+                        {forecastSummary.sectorChartData && forecastSummary.sectorChartData.length > 0 && (
+                            <div className="forecast-breakdown-section">
+                                <h4>Sector Forecast Details</h4>
+                                <div className="breakdown-table">
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>Sector</th>
+                                                <th>Forecasted Enquiries</th>
+                                                <th>Forecasted Value</th>
+                                                <th>Confidence</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {forecastSummary.sectorChartData.map((sector, idx) => (
+                                                <tr key={idx}>
+                                                    <td>{sector.sector}</td>
+                                                    <td>{sector.total_enquiries?.toLocaleString() || 0}</td>
+                                                    <td>₹{sector.total_value?.toLocaleString() || 0}</td>
+                                                    <td className={`confidence-${sector.confidence || 'low'}`}>
+                                                        {(sector.confidence || 'LOW').toUpperCase()}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
