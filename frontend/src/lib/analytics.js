@@ -105,13 +105,26 @@ export const buildInsightsFromDataset = (dataset = []) => {
   const highValue = dataset.filter((lead) => lead.is_high_value)
 
   const overdue = dataset.filter((lead) => {
-    if (lead.lead_status !== 'Open' || !lead.next_followup_date) return false
-    const d = new Date(lead.next_followup_date)
+    const status = (lead.lead_status || '').trim().toLowerCase()
+    const next = lead.next_followup_date
+    if (status !== 'open' || !next) return false
+    const d = new Date(next)
     return !isNaN(d.getTime()) && d < today
   })
 
+  const stageIncludes = (lead, keyword) =>
+    (lead.lead_stage || '').toString().trim().toLowerCase().includes(keyword)
+
+  const lossCandidates = dataset.filter((lead) => {
+    const status = (lead.lead_status || '').trim().toLowerCase()
+    const winFlag = lead.win_flag === 1 || lead.win_flag === true || lead.WinFlag === 1
+    return stageIncludes(lead, 'lost') || (status === 'closed' && !winFlag)
+  })
+
   const lossReasons = groupByField(
-    dataset.filter((lead) => lead.lead_stage?.toLowerCase().includes('lost')),
+    lossCandidates.map((lead) => ({
+      loss_reason: lead.loss_reason || (stageIncludes(lead, 'lost') ? 'Lost' : 'Closed'),
+    })),
     'loss_reason',
   )
 
@@ -125,12 +138,12 @@ export const buildInsightsFromDataset = (dataset = []) => {
   const employeeMap = {}
 
   dataset.forEach((lead) => {
-    const closeDays = lead.close_time_days
+    const closeDays = Number(lead.close_time_days) || null
     const segment = lead.segment || 'Unspecified'
     const followups = Number(lead.followup_count || 0)
     const winFlag = lead.win_flag === 1 || lead.win_flag === true || lead.WinFlag === 1
 
-    if (lead.segment && lead.close_time_days) {
+    if (lead.segment && closeDays) {
       if (!segmentTimes[segment]) segmentTimes[segment] = []
       segmentTimes[segment].push(closeDays)
     }
