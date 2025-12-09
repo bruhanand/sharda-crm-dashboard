@@ -329,13 +329,26 @@ export const buildChartsVisuals = (leads = []) => {
     return {
       monthlyLeads: [],
       conversionTrend: [],
-      statusSummary: [],
+      statusSummary: [
+        { label: 'Open', value: 0 },
+        { label: 'Won', value: 0 },
+        { label: 'Lost', value: 0 },
+      ],
       segmentStatus: [],
       segmentDistribution: [],
       segmentCloseDays: [],
       avgCloseDays: null,
     }
   }
+
+  const normalizeStatus = (status) => {
+    const normalized = (status || '').toString().trim().toLowerCase()
+    if (normalized === 'open') return 'open'
+    if (normalized === 'closed' || normalized === 'close') return 'closed'
+    return normalized || 'open'
+  }
+
+  const normalizeStage = (stage) => (stage || '').toString().trim().toLowerCase()
 
   const monthlyMap = new Map()
   const segmentStatus = {}
@@ -351,12 +364,18 @@ export const buildChartsVisuals = (leads = []) => {
     const segment = lead.segment || 'Unspecified'
     segmentDistribution[segment] = (segmentDistribution[segment] || 0) + 1
 
-    const stage = (lead.lead_stage || '').trim().toLowerCase()
-    const isWon =
-      (stage === 'closed-won' || stage === 'order booked') ||
-      Boolean(lead.win_flag)
+    const statusNormalized = normalizeStatus(lead.lead_status)
+    const stageNormalized = normalizeStage(lead.lead_stage)
 
-    if (lead.lead_status === 'Open') {
+    const isWon =
+      stageNormalized === 'closed-won' ||
+      stageNormalized === 'order booked' ||
+      Boolean(lead.win_flag)
+    const isLost =
+      stageNormalized.includes('lost') ||
+      (statusNormalized === 'closed' && !isWon)
+
+    if (statusNormalized === 'open') {
       openCount += 1
     } else {
       closedCount += 1
@@ -387,7 +406,7 @@ export const buildChartsVisuals = (leads = []) => {
     if (!segmentStatus[segment]) {
       segmentStatus[segment] = { segment, open: 0, closed: 0 }
     }
-    if (lead.lead_status === 'Open') {
+    if (statusNormalized === 'open') {
       segmentStatus[segment].open += 1
     } else {
       segmentStatus[segment].closed += 1
@@ -427,6 +446,8 @@ export const buildChartsVisuals = (leads = []) => {
     }))
     .sort((a, b) => b.avgCloseDays - a.avgCloseDays)
 
+  const lostCount = Math.max(closedCount - wonCount, 0)
+
   return {
     monthlyLeads,
     conversionTrend: monthlyLeads.map((item) => ({
@@ -434,9 +455,9 @@ export const buildChartsVisuals = (leads = []) => {
       conversion: item.conversion,
     })),
     statusSummary: [
-      { label: 'Lost', value: Math.max(closedCount - wonCount, 0) },
+      { label: 'Open', value: openCount },
       { label: 'Won', value: wonCount },
-      { label: 'Closed', value: closedCount },
+      { label: 'Lost', value: lostCount },
     ],
     segmentStatus: segmentStatusArr,
     segmentDistribution: segmentDistributionArr,

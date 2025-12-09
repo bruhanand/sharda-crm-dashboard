@@ -469,6 +469,8 @@ function App() {
             refreshData={refreshData}
             onCloseCommentModal={handleCloseCommentModal}
             currentUser={currentUser}
+            isLoading={isLoading}
+            apiError={apiError}
           />
         </main>
       </div>

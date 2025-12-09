@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { getDateRangeLabel, rupeeFormatter } from '../lib/analytics'
+import { getDateRangeLabel } from '../lib/analytics'
 import {
     BarChart,
     Bar,
@@ -19,8 +19,13 @@ import './ChartsView.css'
 import ChartCard from './ChartCard'
 
 const CHART_COLORS = ['#7fd3ff', '#6be585', '#f5aa3c', '#ff6584', '#a78bfa', '#fbbf24']
+const STATUS_ORDER = [
+    { key: 'Open', color: '#7fd3ff' },
+    { key: 'Won', color: '#6be585' },
+    { key: 'Lost', color: '#ff6584' },
+]
 
-const ChartsView = ({ filters, chartVisuals }) => {
+const ChartsView = ({ filters, chartVisuals, isLoading = false, error = null }) => {
     const {
         monthlyLeads = [],
         conversionTrend = [],
@@ -30,6 +35,18 @@ const ChartsView = ({ filters, chartVisuals }) => {
         segmentCloseDays = [],
         avgCloseDays,
     } = chartVisuals
+
+    const statusData = useMemo(() => {
+        const lookup = statusSummary.reduce((acc, item) => {
+            acc[item.label] = item.value || 0
+            return acc
+        }, {})
+        return STATUS_ORDER.map(({ key, color }) => ({
+            label: key,
+            value: Number(lookup[key] || 0),
+            color,
+        }))
+    }, [statusSummary])
 
     // Group small segments into "Others" to avoid clutter
     const processedSegments = useMemo(() => {
@@ -43,6 +60,52 @@ const ChartsView = ({ filters, chartVisuals }) => {
 
         return [...top, { segment: 'Others', value: othersValue }]
     }, [segmentDistribution])
+
+    const totalSegmentCount = useMemo(
+        () => processedSegments.reduce((sum, item) => sum + item.value, 0),
+        [processedSegments],
+    )
+
+    const hasAnyData =
+        monthlyLeads.length > 0 ||
+        conversionTrend.length > 0 ||
+        statusData.some((s) => s.value > 0) ||
+        processedSegments.length > 0
+
+    if (isLoading) {
+        return (
+            <div className="charts-container">
+                <div className="status-banner info">Loading charts…</div>
+            </div>
+        )
+    }
+
+    if (error) {
+        return (
+            <div className="charts-container">
+                <div className="status-banner error">Unable to load charts: {error}</div>
+            </div>
+        )
+    }
+
+    if (!hasAnyData) {
+        return (
+            <div className="charts-container">
+                <div className="charts-header">
+                    <div>
+                        <p className="eyebrow">Visual Analytics</p>
+                        <h2>Data Insights</h2>
+                    </div>
+                    <span className="charts-date">
+                        {getDateRangeLabel(filters.startDate, filters.endDate)}
+                    </span>
+                </div>
+                <div className="no-data" style={{ minHeight: 180 }}>
+                    No chart data available for the selected filters.
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className="charts-container">
@@ -120,11 +183,11 @@ const ChartsView = ({ filters, chartVisuals }) => {
 
                 {/* Lead Status */}
                 <ChartCard eyebrow="Distribution" title="Lead Status" colSpan={1}>
-                    {statusSummary.length > 0 ? (
+                    {statusData.length > 0 ? (
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
                                 <Pie
-                                    data={statusSummary}
+                                    data={statusData}
                                     dataKey="value"
                                     nameKey="label"
                                     cx="40%"
@@ -134,8 +197,8 @@ const ChartsView = ({ filters, chartVisuals }) => {
                                     label={({ label, value }) => `${label}: ${value}`}
                                     labelLine={{ stroke: '#f5f6fa', strokeWidth: 1 }}
                                 >
-                                    {statusSummary.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                    {statusData.map((entry) => (
+                                        <Cell key={entry.label} fill={entry.color} />
                                     ))}
                                 </Pie>
                                 <Tooltip
@@ -177,16 +240,16 @@ const ChartsView = ({ filters, chartVisuals }) => {
                 {/* Lead Distribution - Takes 2 columns */}
                 <ChartCard eyebrow="Segments" title="Lead Distribution" colSpan={2}>
                     {processedSegments.length > 0 ? (
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minHeight={320}>
                             <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
                                 <Pie
                                     data={processedSegments}
                                     dataKey="value"
                                     nameKey="segment"
-                                    cx="35%"
+                                    cx="40%"
                                     cy="50%"
-                                    innerRadius={80}
-                                    outerRadius={140}
+                                    innerRadius={90}
+                                    outerRadius={150}
                                     paddingAngle={2}
                                 >
                                     {processedSegments.map((entry, index) => (
@@ -200,14 +263,21 @@ const ChartsView = ({ filters, chartVisuals }) => {
                                         borderRadius: '12px',
                                         color: '#ffffff',
                                         padding: '16px 20px',
-                                        fontSize: '16px',
+                                        fontSize: '15px',
                                         fontWeight: 'bold',
                                         boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6)'
                                     }}
-                                    formatter={(value, name) => [
-                                        <span style={{ color: '#7fd3ff', fontSize: '18px' }}>{value} leads</span>,
-                                        <span style={{ color: '#f5f6fa', fontSize: '16px' }}>{name}</span>
-                                    ]}
+                                    formatter={(value, name) => {
+                                        const percent = totalSegmentCount
+                                            ? ((value / totalSegmentCount) * 100).toFixed(1)
+                                            : 0
+                                        return [
+                                            <span style={{ color: '#7fd3ff', fontSize: '18px' }}>
+                                                {value} leads ({percent}%)
+                                            </span>,
+                                            <span style={{ color: '#f5f6fa', fontSize: '16px' }}>{name}</span>
+                                        ]
+                                    }}
                                 />
                                 <Legend
                                     wrapperStyle={{
@@ -225,7 +295,7 @@ const ChartsView = ({ filters, chartVisuals }) => {
                             </PieChart>
                         </ResponsiveContainer>
                     ) : (
-                        <div className="no-data">No data available</div>
+                        <div className="no-data">No lead distribution data available for this period</div>
                     )}
                 </ChartCard>
 

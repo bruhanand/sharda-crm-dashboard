@@ -50,6 +50,8 @@ const Dashboard = ({
     refreshData,
     onCloseCommentModal,
     currentUser,
+    isLoading,
+    apiError,
 }) => {
     // Use backend chartData if available (contains all leads), otherwise fallback to building from paginated leads
     const chartVisuals = useMemo(() => {
@@ -82,7 +84,7 @@ const Dashboard = ({
                 )
 
             case 'Charts':
-                return <ChartsView filters={filters} chartVisuals={chartVisuals} />
+                return <ChartsView filters={filters} chartVisuals={chartVisuals} isLoading={isLoading} error={apiError} />
 
             case 'Insights':
                 return (
