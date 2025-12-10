@@ -13,19 +13,25 @@ echo "============================================"
 echo "  Sharda CRM - Digital Ocean Deployment"
 echo "============================================"
 echo ""
-echo "🔒 SECURITY WARNING: This script contains hardcoded credentials!"
-echo "   Consider using SSH keys or environment variables for production."
+echo "🔒 SECURITY: Using environment variables for credentials"
+echo "   Load credentials before running: source .env.deploy"
+echo "   Or set DEPLOY_DROPLET_IP, DEPLOY_SSH_USER, DEPLOY_SSH_PASS"
 echo ""
 
-# Configuration - Default values (can be overridden)
-DEFAULT_DROPLET_IP="139.59.19.124"
-DEFAULT_SSH_USER="root"
-DEFAULT_SSH_PASS="Akaaand@1234AK"
+# Configuration - Read from environment variables (NO hardcoded defaults)
+# To use: source .env.deploy before running this script
+DEFAULT_DROPLET_IP="${DEPLOY_DROPLET_IP:-}"
+DEFAULT_SSH_USER="${DEPLOY_SSH_USER:-root}"
+DEFAULT_SSH_PASS="${DEPLOY_SSH_PASS:-}"
 
-# Allow override via environment variables or prompts
+# Prompt for credentials if not in environment
 if [ -z "$DROPLET_IP" ]; then
-    read -p "Enter your Digital Ocean droplet IP address (default: $DEFAULT_DROPLET_IP): " DROPLET_IP
-    DROPLET_IP=${DROPLET_IP:-$DEFAULT_DROPLET_IP}
+    if [ -n "$DEFAULT_DROPLET_IP" ]; then
+        read -p "Enter your Digital Ocean droplet IP address (from env): " DROPLET_IP
+        DROPLET_IP=${DROPLET_IP:-$DEFAULT_DROPLET_IP}
+    else
+        read -p "Enter your Digital Ocean droplet IP address: " DROPLET_IP
+    fi
 fi
 
 if [ -z "$SSH_USER" ]; then

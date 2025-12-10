@@ -18,9 +18,14 @@ cd backend
 # Copy local environment file
 if [ -f ".env.local" ]; then
     cp .env.local .env
-    echo "✅ Backend .env configured for local development"
+    echo "✅ Backend .env configured from .env.local"
+elif [ -f ".env.example" ]; then
+    cp .env.example .env
+    echo "✅ Backend .env created from .env.example"
+    echo "⚠️  Please update backend/.env with your SECRET_KEY and settings"
 else
-    echo "❌ Error: .env.local not found in backend directory"
+    echo "❌ Error: .env.local or .env.example not found in backend directory"
+    echo "   Please create backend/.env.local or backend/.env.example"
     cd ..
     exit 1
 fi
@@ -61,9 +66,13 @@ cd frontend
 # Copy local environment file
 if [ -f ".env.local" ]; then
     cp .env.local .env
-    echo "✅ Frontend .env configured for local development"
+    echo "✅ Frontend .env configured from .env.local"
+elif [ -f ".env.example" ]; then
+    cp .env.example .env
+    echo "✅ Frontend .env created from .env.example"
 else
-    echo "❌ Error: .env.local not found in frontend directory"
+    echo "❌ Error: .env.local or .env.example not found in frontend directory"
+    echo "   Please create frontend/.env.local or frontend/.env.example"
     kill $BACKEND_PID
     cd ..
     exit 1

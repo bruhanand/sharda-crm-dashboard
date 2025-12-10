@@ -3,6 +3,13 @@
 .env
 backend/.env
 frontend/.env
+backend/.env.local
+frontend/.env.local
+
+# Deployment credentials (NEVER commit these)
+.env.deploy
+*.pem
+*.key
 
 # But INCLUDE template files (these should be committed)
 # !.env.local
@@ -32,6 +39,7 @@ __pycache__/
 venv/
 env/
 ENV/
+.venv/
 backend/venv/
 backend/logs/
 backend/runtime/
@@ -76,6 +84,9 @@ backups/
 
 # OS
 Thumbs.db
+
+# Documentation (should be version controlled)
+# docs/ - Removed this exclusion - documentation should be tracked in version control
 
 # Excel test files
 *.xlsx

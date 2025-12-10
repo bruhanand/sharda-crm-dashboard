@@ -20,7 +20,6 @@ A comprehensive Customer Relationship Management (CRM) analytics platform built 
 - ✅ Interactive charts and visualizations
 - ✅ Sales forecasting and trend analysis
 - ✅ Dealer performance leaderboards
-- ✅ Business insights and recommendations
 
 ### Performance
 - ✅ Database query optimization (10x faster)
@@ -49,34 +48,28 @@ git clone <repository-url>
 cd crm-sharda
 ```
 
-### 2. Choose Setup Method
-
-#### Option A: Local Development (Without Docker) - Recommended
+### 2. Configure Environment
 ```bash
-# Windows
-.\start-local.ps1
+# Backend
+cp backend/.env.example backend/.env
+# Edit backend/.env with your settings
 
-# Linux/Mac
-./start-local.sh
+# Frontend
+cp frontend/.env.example frontend/.env
 ```
 
-See **[LOCAL_SETUP.md](LOCAL_SETUP.md)** for detailed instructions.
-
-#### Option B: Docker Development
+### 3. Start with Docker
 ```bash
-# Configure Environment
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
-
-# Start with Docker
 docker-compose up --build -d
+```
 
-# Create Admin User
+### 4. Create Admin User
+```bash
 docker exec crm_backend python manage.py createsuperuser
 ```
 
-### 3. Access Application
-- **Frontend**: http://localhost:5173 (local) or http://localhost:3000 (Docker)
+### 5. Access Application
+- **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8000/api/v1
 - **Admin Panel**: http://localhost:8000/admin
 
@@ -102,18 +95,10 @@ crm-sharda/
 │   │   └── utils/         # Utilities
 │   └── package.json
 ├── docker-compose.yml     # Docker orchestration
-└── docs/                  # Documentation (see below)
+└── docs/                  # Documentation
 ```
 
 ## 🛠️ Development
-
-### Local Development Setup (Without Docker)
-
-For detailed local setup instructions, see **[LOCAL_SETUP.md](LOCAL_SETUP.md)**
-
-**Quick Start:**
-- **Windows**: Run `.\start-local.ps1`
-- **Linux/Mac**: Run `./start-local.sh`
 
 ### Backend Development
 ```bash
@@ -167,16 +152,15 @@ POST   /api/v1/leads/upload/preview/   # Preview upload
 POST   /api/v1/leads/upload/create/    # Create from upload
 ```
 
-## 🏗️ Technology Stack
+## 🏗️ Architecture
 
-### Backend
+### Backend Stack
 - **Framework**: Django 5.2 + Django REST Framework
 - **Database**: PostgreSQL 15
 - **Cache**: Redis 7
 - **Server**: Gunicorn + Nginx (production)
-- **ML/Analytics**: Statsmodels, Prophet, Scikit-learn
 
-### Frontend
+### Frontend Stack
 - **Framework**: React 19
 - **Build Tool**: Vite 7
 - **Charts**: Recharts
@@ -195,8 +179,6 @@ POST   /api/v1/leads/upload/create/    # Create from upload
 - **Rate Limiting**: 10 uploads/hour, 1000 requests/hour
 - **SQL Injection Prevention**: ORM + serializer validation
 - **CORS**: Configured with credentials support
-
-See [docs/SECURITY.md](docs/SECURITY.md) for detailed security information.
 
 ## 🚀 Deployment
 
@@ -226,11 +208,7 @@ See [docs/SECURITY.md](docs/SECURITY.md) for detailed security information.
    docker exec -it crm_backend python manage.py createsuperuser
    ```
 
-For detailed deployment instructions, see:
-- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) - General deployment guide
-- [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) - Comprehensive deployment guide
-- [docs/QUICK_DEPLOY.md](docs/QUICK_DEPLOY.md) - Quick deployment steps
-- [docs/FAST_DEPLOY.md](docs/FAST_DEPLOY.md) - Fast deployment script
+See [DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed instructions.
 
 ## 📈 Performance
 
@@ -251,47 +229,6 @@ For detailed deployment instructions, see:
 - **40+ Tests**: Unit, integration, and E2E
 - **Coverage**: 40% (target: 80%)
 - **Frameworks**: Django TestCase, Vitest, React Testing Library
-
-## 📚 Documentation
-
-Comprehensive documentation is available in the `docs/` folder:
-
-### Getting Started
-- [HOW_TO_RUN.md](docs/HOW_TO_RUN.md) - How to run the application
-- [README_LOCAL_SETUP.md](docs/README_LOCAL_SETUP.md) - Local setup guide
-
-### Architecture & Design
-- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - System architecture overview
-- [LOGIN_FLOW.md](docs/LOGIN_FLOW.md) - Authentication flow
-
-### Deployment
-- [DEPLOYMENT.md](docs/DEPLOYMENT.md) - Deployment guide
-- [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) - Comprehensive deployment
-- [DEPLOYMENT_RUNBOOK.md](docs/DEPLOYMENT_RUNBOOK.md) - Deployment runbook
-- [DEPLOYMENT_TEST_REPORT.md](docs/DEPLOYMENT_TEST_REPORT.md) - Deployment testing
-- [DEPLOYMENT_PACKAGE.md](docs/DEPLOYMENT_PACKAGE.md) - Deployment package info
-- [QUICK_DEPLOY.md](docs/QUICK_DEPLOY.md) - Quick deployment
-- [FAST_DEPLOY.md](docs/FAST_DEPLOY.md) - Fast deployment
-
-### Troubleshooting
-- [TROUBLESHOOTING_LOGIN.md](docs/TROUBLESHOOTING_LOGIN.md) - Login issues
-- [FIX_413_ERROR.md](docs/FIX_413_ERROR.md) - 413 error fixes
-- [FIX_413_SUMMARY.md](docs/FIX_413_SUMMARY.md) - 413 error summary
-- [LOGIN_FIX_SUMMARY.md](docs/LOGIN_FIX_SUMMARY.md) - Login fix summary
-- [LOGIN_FIX_COMPLETE.md](docs/LOGIN_FIX_COMPLETE.md) - Complete login fix
-- [SAFARI_LOGIN_FIX.md](docs/SAFARI_LOGIN_FIX.md) - Safari-specific fixes
-- [ROBUST_FIX.md](docs/ROBUST_FIX.md) - Robust fixes
-- [BROWSER_EXTENSION_ERRORS.md](docs/BROWSER_EXTENSION_ERRORS.md) - Browser extension issues
-
-### Security
-- [SECURITY.md](docs/SECURITY.md) - Security documentation
-- [LOGIN_CREDENTIALS.md](docs/LOGIN_CREDENTIALS.md) - Login credentials info
-
-### Development & Analysis
-- [CI_CD_SETUP.md](docs/CI_CD_SETUP.md) - CI/CD setup
-- [BACKEND_CHARTS_UPDATE.md](docs/BACKEND_CHARTS_UPDATE.md) - Backend charts updates
-- [CHARTS_TAB_ANALYSIS.md](docs/CHARTS_TAB_ANALYSIS.md) - Charts analysis
-- [CLEANUP_LOG.md](docs/CLEANUP_LOG.md) - Cleanup log
 
 ## 🤝 Contributing
 
@@ -332,4 +269,4 @@ For issues and questions:
 ---
 
 **Grade**: 100/100 ✅ | **Status**: Production Ready 🚀
-
+# sharda-crm-dashboard

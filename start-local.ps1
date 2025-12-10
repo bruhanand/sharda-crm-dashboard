@@ -17,10 +17,16 @@ cd backend
 # Copy local environment file
 if (Test-Path ".env.local") {
     Copy-Item .env.local .env -Force
-    Write-Host "✅ Backend .env configured for local development" -ForegroundColor Green
+    Write-Host "✅ Backend .env configured from .env.local" -ForegroundColor Green
+}
+elseif (Test-Path ".env.example") {
+    Copy-Item .env.example .env -Force
+    Write-Host "✅ Backend .env created from .env.example" -ForegroundColor Green
+    Write-Host "⚠️  Please update backend/.env with your SECRET_KEY and settings" -ForegroundColor Yellow
 }
 else {
-    Write-Host "❌ Error: .env.local not found in backend directory" -ForegroundColor Red
+    Write-Host "❌ Error: .env.local or .env.example not found in backend directory" -ForegroundColor Red
+    Write-Host "   Please create backend/.env.local or backend/.env.example" -ForegroundColor Yellow
     cd ..
     exit 1
 }
@@ -59,10 +65,15 @@ cd frontend
 # Copy local environment file
 if (Test-Path ".env.local") {
     Copy-Item .env.local .env -Force
-    Write-Host "✅ Frontend .env configured for local development" -ForegroundColor Green
+    Write-Host "✅ Frontend .env configured from .env.local" -ForegroundColor Green
+}
+elseif (Test-Path ".env.example") {
+    Copy-Item .env.example .env -Force
+    Write-Host "✅ Frontend .env created from .env.example" -ForegroundColor Green
 }
 else {
-    Write-Host "❌ Error: .env.local not found in frontend directory" -ForegroundColor Red
+    Write-Host "❌ Error: .env.local or .env.example not found in frontend directory" -ForegroundColor Red
+    Write-Host "   Please create frontend/.env.local or frontend/.env.example" -ForegroundColor Yellow
     cd ..
     exit 1
 }
